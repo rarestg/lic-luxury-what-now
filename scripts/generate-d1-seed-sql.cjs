@@ -11,6 +11,7 @@ const LISTINGS_PATH = path.join(ROOT, "data", "listings.json");
 const GRAPH_PATH = path.join(ROOT, "data", "hash-graph", "listing-graph.json");
 const OUT_PATH = path.join(ROOT, "apps", "worker", "seed", "seed.sql");
 const hasDestructiveReset = process.argv.includes("--destructive-reset");
+const hasYesIAmSure = process.argv.includes("--yes-i-am-sure");
 const hasPruneUnreferencedListings = process.argv.includes("--prune-unreferenced-listings");
 
 function q(value) {
@@ -33,6 +34,12 @@ function ensureDir(filePath) {
 }
 
 function main() {
+  if (hasDestructiveReset && !hasYesIAmSure) {
+    throw new Error(
+      "--destructive-reset requires --yes-i-am-sure to prevent accidental wipes of assertions/assignments",
+    );
+  }
+
   if (!fs.existsSync(LISTINGS_PATH) || !fs.existsSync(GRAPH_PATH)) {
     throw new Error("Missing data/listings.json or data/hash-graph/listing-graph.json");
   }
@@ -116,7 +123,9 @@ function main() {
         `DELETE FROM listings
          WHERE id NOT IN (${listingIds.map((id) => q(id)).join(", ")})
            AND id NOT IN (SELECT DISTINCT listing_id FROM address_assertions)
-           AND id NOT IN (SELECT DISTINCT listing_id FROM listing_address_assignments);`,
+           AND id NOT IN (SELECT DISTINCT listing_id FROM listing_address_assignments)
+           AND id NOT IN (SELECT DISTINCT listing_a_id FROM listing_edges)
+           AND id NOT IN (SELECT DISTINCT listing_b_id FROM listing_edges);`,
       );
     }
   }

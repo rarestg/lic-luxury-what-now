@@ -154,7 +154,7 @@ wrangler d1 execute lic-listings --remote --file migrations/0004_optimize_latest
 cd ../..
 node scripts/generate-d1-seed-sql.cjs
 # Optional full reset (destructive):
-# node scripts/generate-d1-seed-sql.cjs --destructive-reset
+# node scripts/generate-d1-seed-sql.cjs --destructive-reset --yes-i-am-sure
 cd apps/worker
 wrangler d1 execute lic-listings --remote --file seed/seed.sql
 
@@ -262,7 +262,7 @@ The D1 schema (see `scripts/cloudflare-d1-schema.sql` for the consolidated refer
 
 3. **Unused image-level tables** — the initial schema includes `images`, `listing_images`, `image_hashes`, and `image_matches`. These are not currently seeded or queried; the app operates at listing-edge granularity. They exist as forward-looking schema for potential future per-image workflows but carry no runtime cost.
 
-4. **Seed defaults to preserving investigator work** — `generate-d1-seed-sql.cjs` now upserts `runs/listings`, refreshes `listing_edges` for the active run, and preserves `address_assertions` + `listing_address_assignments`. Use `--destructive-reset` only when you explicitly want a full wipe.
+4. **Seed defaults to preserving investigator work** — `generate-d1-seed-sql.cjs` now upserts `runs/listings`, refreshes `listing_edges` for the active run, and preserves `address_assertions` + `listing_address_assignments`. Full wipe now requires both `--destructive-reset` and `--yes-i-am-sure`.
 
 ## Security
 

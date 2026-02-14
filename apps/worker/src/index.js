@@ -44,7 +44,8 @@ function normalizeTeamDomain(value) {
   const raw = String(value || "")
     .trim()
     .replace(/^https?:\/\//i, "");
-  return raw.replace(/\/+$/, "");
+  const hostname = raw.split("/")[0] || "";
+  return hostname.replace(/\/+$/, "").toLowerCase();
 }
 
 function isLocalDevRequest(request) {
@@ -81,6 +82,17 @@ function audienceIncludes(audClaim, expectedAud) {
   return String(audClaim) === expectedAud;
 }
 
+function isValidAccessTeamDomain(teamDomain) {
+  return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.cloudflareaccess\.com$/.test(String(teamDomain || ""));
+}
+
+function makeAccessAuthError(code, status, message) {
+  return Object.assign(new Error(String(message || "Access authentication error")), {
+    code: String(code || "ACCESS_AUTH_ERROR"),
+    status: Number(status) || 500,
+  });
+}
+
 const accessJwksCache = new Map(); // teamDomain -> { expiresAt, keys }
 const accessJwksForcedRefreshByTeam = new Map(); // teamDomain -> last forced refresh ms
 const ACCESS_JWKS_TTL_MS = 5 * 60 * 1000;
@@ -100,6 +112,13 @@ function canForceRefreshJwks(teamDomain) {
 async function getAccessJwks(teamDomain, options = {}) {
   const forceRefresh = Boolean(options?.forceRefresh);
   const cacheKey = String(teamDomain);
+  if (!isValidAccessTeamDomain(cacheKey)) {
+    throw makeAccessAuthError(
+      "ACCESS_CONFIG_ERROR",
+      500,
+      "CF_ACCESS_TEAM_DOMAIN must be a valid *.cloudflareaccess.com hostname",
+    );
+  }
   const now = Date.now();
   const cached = accessJwksCache.get(cacheKey);
   if (
@@ -112,13 +131,37 @@ async function getAccessJwks(teamDomain, options = {}) {
     return cached.keys;
   }
 
-  const res = await fetch(`https://${cacheKey}/cdn-cgi/access/certs`, {
-    method: "GET",
-    headers: { accept: "application/json" },
-  });
-  if (!res.ok) throw new Error(`Cloudflare Access cert fetch failed with HTTP ${res.status}`);
+  let res;
+  try {
+    res = await fetch(`https://${cacheKey}/cdn-cgi/access/certs`, {
+      method: "GET",
+      headers: { accept: "application/json" },
+    });
+  } catch (err) {
+    throw makeAccessAuthError(
+      "ACCESS_JWKS_UPSTREAM_ERROR",
+      502,
+      `Cloudflare Access cert fetch failed: ${err?.message || "network error"}`,
+    );
+  }
+  if (!res.ok) {
+    throw makeAccessAuthError(
+      "ACCESS_JWKS_UPSTREAM_ERROR",
+      502,
+      `Cloudflare Access cert fetch failed with HTTP ${res.status}`,
+    );
+  }
 
-  const payload = await res.json();
+  let payload;
+  try {
+    payload = await res.json();
+  } catch (err) {
+    throw makeAccessAuthError(
+      "ACCESS_JWKS_UPSTREAM_ERROR",
+      502,
+      `Cloudflare Access cert response was not valid JSON: ${err?.message || "parse error"}`,
+    );
+  }
   const rawKeys = Array.isArray(payload?.keys) ? payload.keys : [];
   const keys = rawKeys.filter(
     (key) =>
@@ -129,7 +172,11 @@ async function getAccessJwks(teamDomain, options = {}) {
       typeof key.e === "string",
   );
   if (!keys.length)
-    throw new Error("Cloudflare Access cert payload did not include usable RSA JWKs");
+    throw makeAccessAuthError(
+      "ACCESS_JWKS_UPSTREAM_ERROR",
+      502,
+      "Cloudflare Access cert payload did not include usable RSA JWKs",
+    );
 
   accessJwksCache.set(cacheKey, {
     expiresAt: now + ACCESS_JWKS_TTL_MS,
@@ -205,33 +252,82 @@ async function getIdentityFromAccessJwt(request, env) {
   const devBypassEnabled = isTruthy(env.ACCESS_DEV_BYPASS);
   const localDevRequest = isLocalDevRequest(request);
 
-  if (devBypassEnabled && (localDevRequest || !teamDomain || !expectedAud)) {
+  if (devBypassEnabled && localDevRequest) {
     const devIdentity = String(request.headers.get("x-dev-user") || "").trim();
     return devIdentity || getUnverifiedIdentityFromToken(token) || "dev-bypass@local";
   }
 
   if (!token) return null;
   if (!teamDomain || !expectedAud) {
-    console.error(
-      JSON.stringify({
-        event: "access_config_error",
-        message:
-          "Missing CF_ACCESS_TEAM_DOMAIN or CF_ACCESS_AUD. Set ACCESS_DEV_BYPASS=1 for local bypass mode.",
-      }),
+    throw makeAccessAuthError(
+      "ACCESS_CONFIG_ERROR",
+      500,
+      "Missing CF_ACCESS_TEAM_DOMAIN or CF_ACCESS_AUD. Keep ACCESS_DEV_BYPASS=1 only for localhost dev requests.",
     );
-    return null;
+  }
+  if (!isValidAccessTeamDomain(teamDomain)) {
+    throw makeAccessAuthError(
+      "ACCESS_CONFIG_ERROR",
+      500,
+      "CF_ACCESS_TEAM_DOMAIN must be a valid *.cloudflareaccess.com hostname",
+    );
   }
 
   try {
     return await verifyAccessJwtAndExtractIdentity(token, teamDomain, expectedAud);
   } catch (err) {
+    if (err?.code === "ACCESS_CONFIG_ERROR" || err?.code === "ACCESS_JWKS_UPSTREAM_ERROR") {
+      throw err;
+    }
+    throw makeAccessAuthError(
+      "ACCESS_VERIFY_ERROR",
+      502,
+      err?.message || "unknown access verification error",
+    );
+  }
+}
+
+function accessAuthFailureResponse(err) {
+  const status = Number(err?.status);
+  const isConfigError = err?.code === "ACCESS_CONFIG_ERROR";
+  const isUpstreamError =
+    err?.code === "ACCESS_JWKS_UPSTREAM_ERROR" || err?.code === "ACCESS_VERIFY_ERROR";
+  if (isConfigError || isUpstreamError || status === 500 || status === 502) {
+    const responseStatus = isConfigError ? 500 : 502;
     console.error(
       JSON.stringify({
-        event: "access_verify_error",
-        message: err?.message || "unknown access verification error",
+        event: "access_auth_error",
+        code: err?.code || "ACCESS_AUTH_ERROR",
+        status: responseStatus,
+        message: err?.message || "unknown access auth error",
       }),
     );
-    return null;
+    return json(
+      {
+        ok: false,
+        error:
+          responseStatus === 500
+            ? "Access auth is misconfigured on this worker"
+            : "Access verification temporarily unavailable",
+      },
+      responseStatus,
+    );
+  }
+  return json({ ok: false, error: "Missing Access identity" }, 401);
+}
+
+async function requireAccessIdentity(request, env) {
+  try {
+    const identity = await getIdentityFromAccessJwt(request, env);
+    if (!identity) {
+      return {
+        identity: null,
+        response: json({ ok: false, error: "Missing Access identity" }, 401),
+      };
+    }
+    return { identity, response: null };
+  } catch (err) {
+    return { identity: null, response: accessAuthFailureResponse(err) };
   }
 }
 
@@ -282,6 +378,10 @@ function sleep(ms) {
 }
 
 async function tableHasColumn(env, tableName, columnName) {
+  const allowedTables = new Set(["listings", "listing_edges"]);
+  if (!allowedTables.has(tableName)) {
+    throw new Error(`Unsupported table name for schema probe: ${tableName}`);
+  }
   const result = await env.DB.prepare(`PRAGMA table_info(${tableName})`).all();
   const rows = Array.isArray(result.results) ? result.results : [];
   return rows.some((row) => String(row.name || "") === columnName);
@@ -506,6 +606,7 @@ function buildChangedIds(previousAssignments, nextAssignments, removedIds = []) 
 const geocodeRateMap = new Map(); // identity -> { count, windowStart }
 const GEOCODE_RATE_LIMIT = 30; // requests per window
 const GEOCODE_RATE_WINDOW = 60000; // 1 minute in ms
+const GEOCODE_UPSTREAM_TIMEOUT_MS = 5000;
 
 function checkGeoRate(identity) {
   const now = Date.now();
@@ -521,8 +622,9 @@ function checkGeoRate(identity) {
 // --- Route handlers ---
 
 async function handlePostAssertions(request, env) {
-  const identity = await getIdentityFromAccessJwt(request, env);
-  if (!identity) return json({ ok: false, error: "Missing Access identity" }, 401);
+  const auth = await requireAccessIdentity(request, env);
+  if (auth.response) return auth.response;
+  const identity = auth.identity;
 
   let body;
   try {
@@ -824,8 +926,9 @@ async function handleBootstrap(env) {
 }
 
 async function handleGeocode(request, env) {
-  const identity = await getIdentityFromAccessJwt(request, env);
-  if (!identity) return json({ ok: false, error: "Missing Access identity" }, 401);
+  const auth = await requireAccessIdentity(request, env);
+  if (auth.response) return auth.response;
+  const identity = auth.identity;
 
   // Rate limit by verified identity
   if (!checkGeoRate(identity)) {
@@ -843,12 +946,32 @@ async function handleGeocode(request, env) {
 
   const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(rawAddress)}&key=${encodeURIComponent(googleApiKey)}`;
 
-  const upstream = await fetch(geocodeUrl, {
+  const upstreamOptions = {
     method: "GET",
     headers: {
       accept: "application/json",
     },
-  });
+  };
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    upstreamOptions.signal = AbortSignal.timeout(GEOCODE_UPSTREAM_TIMEOUT_MS);
+  }
+
+  let upstream;
+  try {
+    upstream = await fetch(geocodeUrl, upstreamOptions);
+  } catch (err) {
+    const timeout =
+      err?.name === "TimeoutError" ||
+      err?.name === "AbortError" ||
+      /timed? ?out/i.test(String(err?.message || ""));
+    return json(
+      {
+        ok: false,
+        error: timeout ? "Google geocode request timed out" : "Google geocode request failed",
+      },
+      timeout ? 504 : 502,
+    );
+  }
   if (!upstream.ok) {
     return json({ ok: false, error: `Google geocode HTTP ${upstream.status}` }, 502);
   }

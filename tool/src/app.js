@@ -25,9 +25,39 @@ import { renderListingDetails } from "./ui/details.js";
 import { renderSidebar, updateViewModeButtons } from "./ui/sidebar.js";
 import { nowIso } from "./utils/format.js";
 
+const pendingSaveListingIds = new Set();
+let loadInFlight = false;
+
 function hideEmptyState() {
   const emptyState = document.getElementById("empty-state");
   if (emptyState) emptyState.style.display = "none";
+}
+
+function setButtonLoadingState(button, loading, loadingLabel) {
+  if (!(button instanceof HTMLButtonElement)) return;
+  if (loading) {
+    if (!button.dataset.defaultLabel) button.dataset.defaultLabel = button.textContent || "";
+    button.disabled = true;
+    button.textContent = loadingLabel;
+    return;
+  }
+
+  button.disabled = false;
+  if (button.dataset.defaultLabel) {
+    button.textContent = button.dataset.defaultLabel;
+    delete button.dataset.defaultLabel;
+  }
+}
+
+function getReloadButton() {
+  const btn = document.querySelector('[data-action="reload-data"]');
+  return btn instanceof HTMLButtonElement ? btn : null;
+}
+
+function getSaveButton(listingId) {
+  const selector = `[data-action="save-address"][data-listing-id="${String(listingId)}"]`;
+  const btn = document.querySelector(selector);
+  return btn instanceof HTMLButtonElement ? btn : null;
 }
 
 function copyText(text) {
@@ -57,8 +87,7 @@ async function geocodeAndFill() {
     alert("Geocoding is disabled. Configure .env, then run: node scripts/generate-tool-config.cjs");
     return;
   }
-  btnEl.textContent = "Normalizing...";
-  btnEl.disabled = true;
+  setButtonLoadingState(btnEl, true, "Normalizing...");
   try {
     const cleaned = await geocodeAddress(inputEl.value.trim());
     if (cleaned) {
@@ -69,8 +98,7 @@ async function geocodeAndFill() {
   } catch (e) {
     alert(`Geocoding failed: ${e.message}`);
   }
-  btnEl.textContent = "Normalize";
-  btnEl.disabled = false;
+  setButtonLoadingState(btnEl, false, "Normalize");
 }
 
 async function saveAddress(id) {
@@ -81,6 +109,11 @@ async function saveAddress(id) {
   if (!address) return;
 
   const key = String(id);
+  if (pendingSaveListingIds.has(key)) return;
+
+  pendingSaveListingIds.add(key);
+  setButtonLoadingState(getSaveButton(key), true, "Saving...");
+
   const ls = getListingState(key);
   ls.address = address;
   ls.resolved = true;
@@ -88,22 +121,27 @@ async function saveAddress(id) {
   ls.confidence = 1.0;
   ls.updatedAt = nowIso();
 
-  if (isApiAssertionsEnabled()) {
-    try {
-      const payload = await postAssertionToApi(key, address);
-      if (payload.assignments && typeof payload.assignments === "object") {
-        mergeAssignments(payload.assignments);
+  try {
+    if (isApiAssertionsEnabled()) {
+      try {
+        const payload = await postAssertionToApi(key, address);
+        if (payload.assignments && typeof payload.assignments === "object") {
+          mergeAssignments(payload.assignments);
+        }
+        if (payload.conflict) {
+          alert("Saved, but component has conflicting direct addresses. Inference was limited.");
+        }
+      } catch (e) {
+        alert(`API save failed, kept local save only: ${e.message}`);
       }
-      if (payload.conflict) {
-        alert("Saved, but component has conflicting direct addresses. Inference was limited.");
-      }
-    } catch (e) {
-      alert(`API save failed, kept local save only: ${e.message}`);
     }
-  }
 
-  saveState();
-  selectListing(key);
+    saveState();
+    selectListing(key);
+  } finally {
+    pendingSaveListingIds.delete(key);
+    setButtonLoadingState(getSaveButton(key), false, "Save Address");
+  }
 }
 
 function editAddress(id) {
@@ -244,13 +282,22 @@ async function loadFromApiBootstrap() {
     if (!bootstrapRes.ok) return false;
 
     const payload = await bootstrapRes.json();
-    if (!payload?.ok || !Array.isArray(payload.listings) || !payload.graph || typeof payload.graph !== "object") {
+    if (
+      !payload?.ok ||
+      !Array.isArray(payload.listings) ||
+      !payload.graph ||
+      typeof payload.graph !== "object"
+    ) {
       return false;
     }
 
     setListings(payload.listings);
     applyGraphData(payload.graph);
-    if (isApiAssertionsEnabled() && payload.assignments && typeof payload.assignments === "object") {
+    if (
+      isApiAssertionsEnabled() &&
+      payload.assignments &&
+      typeof payload.assignments === "object"
+    ) {
       mergeAssignments(payload.assignments);
     }
     hideEmptyState();
@@ -263,46 +310,55 @@ async function loadFromApiBootstrap() {
 }
 
 async function loadFromDisk() {
-  if (isApiAssertionsEnabled()) {
-    const loadedFromApi = await loadFromApiBootstrap();
-    if (loadedFromApi) return;
-  }
+  if (loadInFlight) return;
+  loadInFlight = true;
+  setButtonLoadingState(getReloadButton(), true, "Reloading...");
 
   try {
-    const [listingsRes, graphRes] = await Promise.all([
-      fetch("data/listings.json"),
-      fetch("data/hash-graph/listing-graph.json"),
-    ]);
-
-    let loadedFromDisk = false;
-    if (listingsRes.ok) {
-      setListings(await listingsRes.json());
-      hideEmptyState();
-      loadedFromDisk = true;
+    if (isApiAssertionsEnabled()) {
+      const loadedFromApi = await loadFromApiBootstrap();
+      if (loadedFromApi) return;
     }
 
-    if (graphRes.ok) {
-      const graph = await graphRes.json();
-      applyGraphData(graph);
-      loadedFromDisk = true;
-    } else if (listingsRes.ok) {
-      applyGraphData(null);
+    try {
+      const [listingsRes, graphRes] = await Promise.all([
+        fetch("data/listings.json"),
+        fetch("data/hash-graph/listing-graph.json"),
+      ]);
+
+      let loadedFromDisk = false;
+      if (listingsRes.ok) {
+        setListings(await listingsRes.json());
+        hideEmptyState();
+        loadedFromDisk = true;
+      }
+
+      if (graphRes.ok) {
+        const graph = await graphRes.json();
+        applyGraphData(graph);
+        loadedFromDisk = true;
+      } else if (listingsRes.ok) {
+        applyGraphData(null);
+      }
+
+      if (loadedFromDisk) {
+        renderSidebar();
+        if (appState.selectedId) selectListing(appState.selectedId);
+        return;
+      }
+    } catch {
+      // fall through
     }
 
-    if (loadedFromDisk) {
-      renderSidebar();
-      if (appState.selectedId) selectListing(appState.selectedId);
-      return;
-    }
-  } catch {
-    // fall through
+    const loadedFromApi = await loadFromApiBootstrap();
+    if (loadedFromApi) return;
+
+    console.log("Auto-load failed (local data and API bootstrap), use file picker instead");
+    renderSidebar();
+  } finally {
+    loadInFlight = false;
+    setButtonLoadingState(getReloadButton(), false, "Reload Data");
   }
-
-  const loadedFromApi = await loadFromApiBootstrap();
-  if (loadedFromApi) return;
-
-  console.log("Auto-load failed (local data and API bootstrap), use file picker instead");
-  renderSidebar();
 }
 
 function applyAddressToCurrentComponent() {

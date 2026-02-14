@@ -131,7 +131,7 @@ wrangler d1 execute lic-listings --remote --file migrations/0004_optimize_latest
 cd /path/to/lic-listings
 node scripts/generate-d1-seed-sql.cjs
 # optional full reset (destructive):
-# node scripts/generate-d1-seed-sql.cjs --destructive-reset
+# node scripts/generate-d1-seed-sql.cjs --destructive-reset --yes-i-am-sure
 cd apps/worker
 wrangler d1 execute lic-listings --remote --file seed/seed.sql
 ```
