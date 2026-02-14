@@ -11,7 +11,7 @@
     {
       "binding": "DB",
       "database_name": "lic-listings",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+      "database_id": "23ab2faf-52a0-4820-8fc8-fa017a94da97"
     }
   ],
   "vars": {

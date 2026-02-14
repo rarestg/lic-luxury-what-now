@@ -21,8 +21,8 @@ Implemented today:
 5. `GET /api/bootstrap`
 6. `GET /api/geocode`
 7. D1 migrations in `apps/worker/migrations/`
-8. Seed generator `scripts/generate-d1-seed-sql.js`
-9. Static asset prep script `scripts/prepare-worker-public.js`
+8. Seed generator `scripts/generate-d1-seed-sql.cjs`
+9. Static asset prep script `scripts/prepare-worker-public.cjs`
 10. UI save-path integration in `tool/index.html` behind config flag (`LIC_USE_API_ASSERTIONS`)
 
 Not implemented yet:
@@ -128,7 +128,7 @@ wrangler d1 execute lic-listings --file migrations/0002_add_component_id.sql
 
 ```bash
 cd /path/to/lic-listings
-node scripts/generate-d1-seed-sql.js
+node scripts/generate-d1-seed-sql.cjs
 cd apps/worker
 wrangler d1 execute lic-listings --file seed/seed.sql
 ```
@@ -137,7 +137,7 @@ wrangler d1 execute lic-listings --file seed/seed.sql
 
 ```bash
 cd /path/to/lic-listings
-node scripts/prepare-worker-public.js
+node scripts/prepare-worker-public.cjs
 ```
 
 `apps/worker/public/` will contain:
@@ -259,8 +259,8 @@ To move to live mode:
 1. Set `.env` with:
 2. `LIC_USE_API_ASSERTIONS=1`
 3. `LIC_API_BASE_URL=` (blank for same origin; set full URL if cross-origin)
-4. Run `node scripts/generate-tool-config.js`
-5. Rebuild worker assets (`node scripts/prepare-worker-public.js`)
+4. Run `node scripts/generate-tool-config.cjs`
+5. Rebuild worker assets (`node scripts/prepare-worker-public.cjs`)
 6. On save, UI calls `/api/assertions` and merges returned `assignments` into local state
 7. Local save still occurs as fallback if API call fails
 
@@ -270,7 +270,7 @@ Geocoding integration:
 2. Read `GOOGLE_MAPS_API_KEY` from Worker secret, never from browser
 3. Return `{ "address": "<formatted address>" }` (or compatible shape)
 4. Set `.env` locally with `LIC_GEOCODE_ENDPOINT=/api/geocode`
-5. Run `node scripts/generate-tool-config.js` so `tool/config.local.js` points UI to Worker endpoint
+5. Run `node scripts/generate-tool-config.cjs` so `tool/config.local.js` points UI to Worker endpoint
 
 ## Realtime Multi-User Update Options
 
@@ -301,9 +301,9 @@ apps/worker/
 ├── migrations/
 │   ├── 0001_initial_schema.sql
 │   └── 0002_add_component_id.sql
-├── public/                    # built by scripts/prepare-worker-public.js
+├── public/                    # built by scripts/prepare-worker-public.cjs
 ├── seed/
-│   └── seed.sql               # built by scripts/generate-d1-seed-sql.js
+│   └── seed.sql               # built by scripts/generate-d1-seed-sql.cjs
 ├── src/
 │   └── index.js              # Router + D1 logic
 └── wrangler.jsonc
@@ -312,9 +312,9 @@ apps/worker/
 ## Deployment Flow
 
 1. Generate fresh `listing-graph.json` offline
-2. Generate seed SQL (`node scripts/generate-d1-seed-sql.js`)
+2. Generate seed SQL (`node scripts/generate-d1-seed-sql.cjs`)
 3. Apply migrations and seed D1
-4. Build Worker public bundle (`node scripts/prepare-worker-public.js`)
+4. Build Worker public bundle (`node scripts/prepare-worker-public.cjs`)
 5. Configure `.env` and regenerate `tool/config.local.js` if needed
 6. Deploy Worker (`wrangler deploy`)
 7. Run smoke tests for assertion -> propagation -> merge in UI

@@ -20,7 +20,7 @@ wrangler d1 execute lic-listings --file migrations/0002_add_component_id.sql
 From repo root:
 
 ```bash
-node scripts/generate-d1-seed-sql.js
+node scripts/generate-d1-seed-sql.cjs
 cd apps/worker
 wrangler d1 execute lic-listings --file seed/seed.sql
 ```
@@ -34,8 +34,8 @@ cd /path/to/lic-listings
 # optional: enable API save mode in UI
 # cp .env.example .env
 # set LIC_USE_API_ASSERTIONS=1 and optionally LIC_API_BASE_URL=
-# node scripts/generate-tool-config.js
-node scripts/prepare-worker-public.js
+# node scripts/generate-tool-config.cjs
+node scripts/prepare-worker-public.cjs
 ```
 
 Then run dev server:
@@ -50,9 +50,9 @@ wrangler dev
 ```bash
 cd /path/to/lic-listings
 # Production: skip static data files, UI loads from /api/bootstrap
-node scripts/prepare-worker-public.js --no-data
+node scripts/prepare-worker-public.cjs --no-data
 # Dev/offline fallback: include static data files
-# node scripts/prepare-worker-public.js
+# node scripts/prepare-worker-public.cjs
 cd apps/worker
 wrangler deploy
 ```

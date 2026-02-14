@@ -117,7 +117,7 @@ Configure geocoding (recommended before use):
 cp .env.example .env
 # Set LIC_GEOCODE_ENDPOINT (recommended for Cloudflare) or LIC_GOOGLE_MAPS_API_KEY
 # Optional cloud save flags: LIC_USE_API_ASSERTIONS=1 and LIC_API_BASE_URL=
-node scripts/generate-tool-config.js
+node scripts/generate-tool-config.cjs
 ```
 
 UI capabilities:
@@ -260,8 +260,8 @@ Quick start (Worker + D1):
 
 ```bash
 # from repo root
-node scripts/generate-d1-seed-sql.js
-node scripts/prepare-worker-public.js
+node scripts/generate-d1-seed-sql.cjs
+node scripts/prepare-worker-public.cjs
 
 cd apps/worker
 # apply migrations

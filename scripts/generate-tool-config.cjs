@@ -32,18 +32,23 @@ function parseEnv(contents) {
   return env;
 }
 
+function resolve(fileEnv, key) {
+  // Environment variables take precedence over .env file values
+  return String(process.env[key] || fileEnv[key] || '').trim();
+}
+
 function main() {
-  if (!fs.existsSync(ENV_PATH)) {
-    console.error(`Missing ${ENV_PATH}`);
-    console.error('Create it from .env.example first.');
-    process.exit(1);
+  let fileEnv = Object.create(null);
+  if (fs.existsSync(ENV_PATH)) {
+    fileEnv = parseEnv(fs.readFileSync(ENV_PATH, 'utf8'));
+  } else {
+    console.log(`No .env file found at ${ENV_PATH}, using environment variables only.`);
   }
 
-  const env = parseEnv(fs.readFileSync(ENV_PATH, 'utf8'));
-  const geocodeEndpoint = String(env.LIC_GEOCODE_ENDPOINT || '').trim();
-  const googleMapsApiKey = String(env.LIC_GOOGLE_MAPS_API_KEY || '').trim();
-  const apiBaseUrl = String(env.LIC_API_BASE_URL || '').trim();
-  const useApiAssertions = ['1', 'true', 'yes', 'on'].includes(String(env.LIC_USE_API_ASSERTIONS || '').trim().toLowerCase());
+  const geocodeEndpoint = resolve(fileEnv, 'LIC_GEOCODE_ENDPOINT');
+  const googleMapsApiKey = resolve(fileEnv, 'LIC_GOOGLE_MAPS_API_KEY');
+  const apiBaseUrl = resolve(fileEnv, 'LIC_API_BASE_URL');
+  const useApiAssertions = ['1', 'true', 'yes', 'on'].includes(resolve(fileEnv, 'LIC_USE_API_ASSERTIONS').toLowerCase());
 
   const payload = {
     geocodeEndpoint,
