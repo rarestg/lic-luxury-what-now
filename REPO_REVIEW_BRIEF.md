@@ -25,7 +25,7 @@ Core point: graph components are clustering signals, not guaranteed 1:1 building
 5. `data/listings.json`
 6. `data/hash-graph/listing-graph.json`
 
-### UI workflow (Phase 1 complete)
+### UI workflow (implemented)
 
 Implemented in `tool/index.html`:
 
@@ -36,14 +36,15 @@ Implemented in `tool/index.html`:
 5. min/avg pHash + dHash
 6. sample URL pairs
 7. strength label (`Strong/Medium/Weak`)
-8. Bulk apply to component (unresolved-only default)
+8. Bulk apply to component in local mode only (unresolved-only default)
 9. Conflict block when multiple resolved addresses exist in component
 10. Single-step undo for last bulk apply
 11. State metadata per listing: `source`, `confidence`, `updatedAt`
 12. Graph-only connectivity preserved (no image-map fallback)
 13. Existing sanitization preserved (`escapeHtml`, `safeUrl`)
+14. In API mode, local bulk apply/undo actions are disabled to avoid local/server divergence; save one listing and let server propagation return deltas.
 
-### Cloud/backend (Phase 2 implementation in code complete; provisioning pending)
+### Cloud/backend (implemented; repeatable for new environments)
 
 Implemented project scaffold:
 
@@ -67,7 +68,8 @@ Implemented UI API integration:
 1. Config-driven API mode (`LIC_USE_API_ASSERTIONS`, `LIC_API_BASE_URL`)
 2. Save path can call `/api/assertions`
 3. Returned `assignments` merged into local UI state
-4. Local fallback retained if API call fails
+4. `/api/bootstrap` now returns assignment state; UI hydrates assignments in API mode on load
+5. Local fallback retained if API call fails
 
 ## 3) Target Cloudflare Architecture (Current Direction)
 
@@ -120,12 +122,12 @@ Flow:
 2. Verify Access JWT signature + claims (`iss`, `aud`, `exp`, `nbf`)
 3. Acquire component-level write lock (serialize concurrent writes per component)
 4. Normalize incoming address
-5. Insert direct assertion row
-6. Find component members by `listings.component_id`
-7. Compute latest direct assertions in component
+5. Find component members by `listings.component_id`
+6. Compute latest direct assertions in component while lock is held
+7. Include incoming direct assertion in propagation decision
 8. If conflict (>1 normalized address): keep direct assignments only
 9. If no conflict: infer unresolved peers in component
-10. Upsert `listing_address_assignments`
+10. Write assertion row + assignment upserts in one `DB.batch()`
 11. Return only changed assignments for UI merge
 
 Concurrency guarantee:
@@ -148,11 +150,15 @@ Output includes:
 2. Reads `data/listings.json` + `data/hash-graph/listing-graph.json`
 3. Writes `apps/worker/seed/seed.sql` with active run + listings + edges + component ids
 4. Safe-by-default mode preserves `address_assertions` + `listing_address_assignments`
-5. Destructive reset requires explicit `--destructive-reset`
+5. Destructive reset requires both `--destructive-reset` and `--yes-i-am-sure`
 6. Optional cleanup mode: `--prune-unreferenced-listings`
 
 1. `scripts/prepare-worker-public.cjs`
 2. Builds `apps/worker/public/` from local UI + minimal static data bundle
+
+1. `scripts/generate-tool-config.cjs`
+2. Supports production guard `LIC_FORBID_BROWSER_GOOGLE_MAPS_KEY=1` to block embedding browser Google Maps API keys in generated client config.
+3. `apps/worker/package.json` enables this guard in `prepare:public:prod`.
 
 ## 7) Code Quality Tooling Added
 
@@ -168,15 +174,21 @@ Root tooling configured:
 8. `check`
 9. `check:fix`
 
-Note: this directory was not originally a git repo; it has now been initialized and pushed.
+Verification status in current workspace:
 
-## 8) What Still Needs Cloudflare-Account Execution
+1. `npm run lint` passes
+2. `npm run typecheck` passes
+3. `npm run check` passes
+
+## 8) Cloudflare-Account Tasks (For Fresh/New Environments)
+
+Current repo includes a live deployment reference in root `README.md`. Use the following when standing up a new account/environment:
 
 1. Install/auth `wrangler` in operator environment
 2. Create D1 DB and set real `database_id` in `apps/worker/wrangler.jsonc`
 3. Apply migrations
 4. Load seed SQL
-5. Configure Worker runtime vars:
+5. Configure Worker runtime vars in Cloudflare runtime settings:
 6. `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `ACCESS_DEV_BYPASS=0`, `ACTIVE_RUN_ID=active`
 7. Configure Worker secret:
 8. `GOOGLE_MAPS_API_KEY` (if `/api/geocode` is used)
