@@ -11,16 +11,6 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": [
-    "apps/worker/src/**/*.js",
-    "scripts/**/*.js",
-    "tool/config.js"
-  ],
-  "exclude": [
-    "node_modules",
-    "data",
-    ".firecrawl",
-    "apps/worker/public",
-    "apps/worker/seed"
-  ]
+  "include": ["apps/worker/src/**/*.js", "scripts/**/*.js", "tool/config.js", "tool/src/**/*.js"],
+  "exclude": ["node_modules", "data", ".firecrawl", "apps/worker/public", "apps/worker/seed"]
 }
