@@ -686,6 +686,7 @@ async function handlePostAssertions(request, env) {
 }
 
 async function handleBootstrap(env) {
+  const runId = String(env.ACTIVE_RUN_ID || "active");
   const [hasListingMetadata, hasEdgeSamplePairs] = await Promise.all([
     tableHasColumn(env, "listings", "metadata_json"),
     tableHasColumn(env, "listing_edges", "sample_image_pairs_json"),
@@ -704,7 +705,14 @@ async function handleBootstrap(env) {
      WHERE run_id = ?
      ORDER BY matched_image_pairs DESC`,
   )
-    .bind(String(env.ACTIVE_RUN_ID || "active"))
+    .bind(runId)
+    .all();
+  const assignmentsRes = await env.DB.prepare(
+    `SELECT listing_id, address, source, confidence
+     FROM listing_address_assignments
+     WHERE run_id = ?`,
+  )
+    .bind(runId)
     .all();
 
   const listingRows = Array.isArray(listingsRes.results) ? listingsRes.results : [];
@@ -756,10 +764,43 @@ async function handleBootstrap(env) {
     size: listingIds.length,
   }));
 
+  const assignmentRows = Array.isArray(assignmentsRes.results) ? assignmentsRes.results : [];
+  const assignmentByListing = new Map();
+  for (const row of assignmentRows) {
+    assignmentByListing.set(String(row.listing_id), {
+      address: String(row.address || ""),
+      source: String(row.source || ""),
+      confidence: Number.isFinite(Number(row.confidence)) ? Number(row.confidence) : null,
+    });
+  }
+  const assignments = {};
+  for (const row of listingRows) {
+    const listingId = String(row.id || "");
+    const assignment = assignmentByListing.get(listingId);
+    if (assignment) {
+      assignments[listingId] = {
+        address: assignment.address,
+        resolved: Boolean(assignment.address),
+        source: assignment.source,
+        confidence: assignment.confidence,
+        updatedAt: null,
+      };
+    } else {
+      assignments[listingId] = {
+        address: "",
+        resolved: false,
+        source: "",
+        confidence: null,
+        updatedAt: null,
+      };
+    }
+  }
+
   return json(
     {
       ok: true,
       listings,
+      assignments,
       graph: {
         generatedAt: new Date().toISOString(),
         nodes: listings.map((row) => ({
@@ -778,7 +819,7 @@ async function handleBootstrap(env) {
       },
     },
     200,
-    { "cache-control": "public, max-age=300" },
+    { "cache-control": "no-store" },
   );
 }
 

@@ -37,6 +37,10 @@ function resolve(fileEnv, key) {
   return String(process.env[key] || fileEnv[key] || "").trim();
 }
 
+function isTruthy(value) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
 function main() {
   let fileEnv = Object.create(null);
   if (fs.existsSync(ENV_PATH)) {
@@ -48,9 +52,18 @@ function main() {
   const geocodeEndpoint = resolve(fileEnv, "LIC_GEOCODE_ENDPOINT");
   const googleMapsApiKey = resolve(fileEnv, "LIC_GOOGLE_MAPS_API_KEY");
   const apiBaseUrl = resolve(fileEnv, "LIC_API_BASE_URL");
+  const forbidBrowserGoogleMapsKey = isTruthy(resolve(fileEnv, "LIC_FORBID_BROWSER_GOOGLE_MAPS_KEY"));
   const useApiAssertions = ["1", "true", "yes", "on"].includes(
     resolve(fileEnv, "LIC_USE_API_ASSERTIONS").toLowerCase(),
   );
+
+  // Safety guard: production Worker bundles should never expose a browser Google Maps key.
+  // Use the server-side `/api/geocode` path with Worker secret `GOOGLE_MAPS_API_KEY` instead.
+  if (forbidBrowserGoogleMapsKey && googleMapsApiKey) {
+    throw new Error(
+      "LIC_GOOGLE_MAPS_API_KEY must be empty when LIC_FORBID_BROWSER_GOOGLE_MAPS_KEY=1. Use LIC_GEOCODE_ENDPOINT and Worker secret GOOGLE_MAPS_API_KEY instead.",
+    );
+  }
 
   const payload = {
     geocodeEndpoint,
@@ -71,6 +84,9 @@ window.LIC_CONFIG = Object.assign({}, window.LIC_CONFIG || {}, ${JSON.stringify(
     console.log(`Using backend geocode endpoint: ${geocodeEndpoint}`);
   } else {
     console.log("Using direct browser geocoding with LIC_GOOGLE_MAPS_API_KEY.");
+  }
+  if (forbidBrowserGoogleMapsKey) {
+    console.log("Browser Google Maps key guard is enabled (LIC_FORBID_BROWSER_GOOGLE_MAPS_KEY=1).");
   }
   if (useApiAssertions) {
     console.log(
