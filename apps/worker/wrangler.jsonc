@@ -2,6 +2,7 @@
   "name": "lic-listings-worker",
   "main": "src/index.js",
   "compatibility_date": "2026-02-13",
+  "keep_vars": true,
   "assets": {
     "directory": "./public",
     "not_found_handling": "single-page-application",
@@ -15,6 +16,9 @@
     }
   ],
   "vars": {
-    "ACTIVE_RUN_ID": "active"
+    "ACTIVE_RUN_ID": "active",
+    "CF_ACCESS_TEAM_DOMAIN": "your-team.cloudflareaccess.com",
+    "CF_ACCESS_AUD": "your-access-aud-tag",
+    "ACCESS_DEV_BYPASS": "0"
   }
 }

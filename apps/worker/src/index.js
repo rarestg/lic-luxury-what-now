@@ -25,15 +25,170 @@ function decodeBase64Url(input) {
   return atob(padded);
 }
 
-function getIdentityFromAccessJwt(request) {
-  const token = request.headers.get("Cf-Access-Jwt-Assertion");
-  if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
+function decodeBase64UrlToBytes(input) {
+  const binary = decodeBase64Url(input);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function parseJwtPart(part) {
   try {
-    const payload = JSON.parse(decodeBase64Url(parts[1]));
-    return String(payload.email || payload.sub || "").trim() || null;
+    return JSON.parse(decodeBase64Url(part));
+  } catch {
+    return null;
+  }
+}
+
+function normalizeTeamDomain(value) {
+  const raw = String(value || "").trim().replace(/^https?:\/\//i, "");
+  return raw.replace(/\/+$/, "");
+}
+
+function isTruthy(value) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
+function getUnverifiedIdentityFromToken(token) {
+  const parts = String(token || "").split(".");
+  if (parts.length < 2) return null;
+  const payload = parseJwtPart(parts[1]);
+  if (!payload || typeof payload !== "object") return null;
+  return String(payload.email || payload.sub || "").trim() || null;
+}
+
+function audienceIncludes(audClaim, expectedAud) {
+  if (Array.isArray(audClaim)) return audClaim.map((value) => String(value)).includes(expectedAud);
+  if (audClaim == null) return false;
+  return String(audClaim) === expectedAud;
+}
+
+const accessJwksCache = new Map(); // teamDomain -> { expiresAt, keys }
+const ACCESS_JWKS_TTL_MS = 5 * 60 * 1000;
+const JWT_CLOCK_SKEW_SECONDS = 60;
+const textEncoder = new TextEncoder();
+
+async function getAccessJwks(teamDomain) {
+  const cacheKey = String(teamDomain);
+  const now = Date.now();
+  const cached = accessJwksCache.get(cacheKey);
+  if (cached && cached.expiresAt > now && Array.isArray(cached.keys) && cached.keys.length) {
+    return cached.keys;
+  }
+
+  const res = await fetch(`https://${cacheKey}/cdn-cgi/access/certs`, {
+    method: "GET",
+    headers: { accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`Cloudflare Access cert fetch failed with HTTP ${res.status}`);
+
+  const payload = await res.json();
+  const rawKeys = Array.isArray(payload?.keys) ? payload.keys : [];
+  const keys = rawKeys.filter(
+    (key) =>
+      key &&
+      typeof key === "object" &&
+      key.kty === "RSA" &&
+      typeof key.n === "string" &&
+      typeof key.e === "string",
+  );
+  if (!keys.length) throw new Error("Cloudflare Access cert payload did not include usable RSA JWKs");
+
+  accessJwksCache.set(cacheKey, {
+    expiresAt: now + ACCESS_JWKS_TTL_MS,
+    keys,
+  });
+  return keys;
+}
+
+async function verifyAccessJwtAndExtractIdentity(token, teamDomain, expectedAud) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 3) return null;
+
+  const [encodedHeader, encodedPayload, encodedSignature] = parts;
+  const header = parseJwtPart(encodedHeader);
+  const payload = parseJwtPart(encodedPayload);
+  if (!header || !payload) return null;
+  if (String(header.alg || "") !== "RS256") return null;
+
+  const issuer = String(payload.iss || "").trim();
+  const expectedIssuer = `https://${teamDomain}`;
+  if (issuer !== expectedIssuer) return null;
+  if (!audienceIncludes(payload.aud, expectedAud)) return null;
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const exp = Number(payload.exp);
+  const nbf = Number(payload.nbf);
+  if (!Number.isFinite(exp) || exp <= nowSeconds - JWT_CLOCK_SKEW_SECONDS) return null;
+  if (Number.isFinite(nbf) && nbf > nowSeconds + JWT_CLOCK_SKEW_SECONDS) return null;
+
+  const signingInput = textEncoder.encode(`${encodedHeader}.${encodedPayload}`);
+  const signature = decodeBase64UrlToBytes(encodedSignature);
+  const keys = await getAccessJwks(teamDomain);
+  const kid = String(header.kid || "").trim();
+  const candidateKeys = kid ? keys.filter((key) => String(key.kid || "") === kid) : keys;
+  if (!candidateKeys.length) return null;
+
+  let verified = false;
+  for (const jwk of candidateKeys) {
+    try {
+      const cryptoKey = await crypto.subtle.importKey(
+        "jwk",
+        jwk,
+        { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+        false,
+        ["verify"],
+      );
+      const ok = await crypto.subtle.verify(
+        "RSASSA-PKCS1-v1_5",
+        cryptoKey,
+        signature,
+        signingInput,
+      );
+      if (ok) {
+        verified = true;
+        break;
+      }
+    } catch {
+      // try next candidate key
+    }
+  }
+  if (!verified) return null;
+  return String(payload.email || payload.sub || "").trim() || null;
+}
+
+async function getIdentityFromAccessJwt(request, env) {
+  const token = request.headers.get("Cf-Access-Jwt-Assertion");
+  const teamDomain = normalizeTeamDomain(env.CF_ACCESS_TEAM_DOMAIN);
+  const expectedAud = String(env.CF_ACCESS_AUD || "").trim();
+  const devBypassEnabled = isTruthy(env.ACCESS_DEV_BYPASS);
+
+  if (devBypassEnabled && (!teamDomain || !expectedAud)) {
+    const devIdentity = String(request.headers.get("x-dev-user") || "").trim();
+    return devIdentity || getUnverifiedIdentityFromToken(token) || "dev-bypass@local";
+  }
+
+  if (!token) return null;
+  if (!teamDomain || !expectedAud) {
+    console.error(
+      JSON.stringify({
+        event: "access_config_error",
+        message:
+          "Missing CF_ACCESS_TEAM_DOMAIN or CF_ACCESS_AUD. Set ACCESS_DEV_BYPASS=1 for local bypass mode.",
+      }),
+    );
+    return null;
+  }
+
+  try {
+    return await verifyAccessJwtAndExtractIdentity(token, teamDomain, expectedAud);
   } catch (err) {
+    console.error(
+      JSON.stringify({
+        event: "access_verify_error",
+        message: err?.message || "unknown access verification error",
+      }),
+    );
     return null;
   }
 }
@@ -233,7 +388,7 @@ function checkGeoRate(identity) {
 // --- Route handlers ---
 
 async function handlePostAssertions(request, env) {
-  const identity = getIdentityFromAccessJwt(request);
+  const identity = await getIdentityFromAccessJwt(request, env);
   if (!identity) return json({ ok: false, error: "Missing Access identity" }, 401);
 
   let body;
@@ -479,7 +634,7 @@ async function handleBootstrap(env) {
 
 async function handleGeocode(request, env) {
   // Rate limit by identity (Access already gates the app)
-  const identity = getIdentityFromAccessJwt(request) || "anonymous";
+  const identity = (await getIdentityFromAccessJwt(request, env)) || "anonymous";
   if (!checkGeoRate(identity)) {
     return json({ ok: false, error: "Rate limit exceeded. Try again shortly." }, 429);
   }
