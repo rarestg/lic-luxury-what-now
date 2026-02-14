@@ -300,9 +300,15 @@ export function renderListingDetails(selectedId) {
   const metadataLine = metadataBits.length
     ? `<p class="section-sub">${escapeHtml(metadataBits.join(" · "))}</p>`
     : "";
-  const saveModeLine = isApiAssertionsEnabled()
+  const apiMode = isApiAssertionsEnabled();
+  const saveModeLine = apiMode
     ? '<p class="section-sub">Save mode: API-backed (`POST /api/assertions`) with local cache merge.</p>'
     : '<p class="section-sub">Save mode: local-only (`localStorage`).</p>';
+  const showLocalBulkActions = Boolean(clustered && !apiMode);
+  const apiPropagationHint =
+    clustered && apiMode
+      ? '<p class="address-cluster-hint">API mode: bulk apply is disabled. Save an address on one listing and let server propagation update the component.</p>'
+      : "";
 
   return `
     <div class="detail-shell">
@@ -363,9 +369,10 @@ export function renderListingDetails(selectedId) {
         }
 
         ${clustered ? `<p class="address-cluster-hint">Cluster C${escapeHtml(String(component.componentId))}: ${componentSummary.resolvedCount} resolved, ${component.size - componentSummary.resolvedCount} unresolved.</p>` : ""}
-        ${clustered && hasComponentConflict ? `<div class="component-warning">Bulk apply blocked: component has conflicting resolved addresses (${escapeHtml(conflictAddresses.join(" | "))}). Resolve conflict first.</div>` : ""}
+        ${apiPropagationHint}
+        ${clustered && hasComponentConflict ? `<div class="component-warning">Component has conflicting resolved addresses (${escapeHtml(conflictAddresses.join(" | "))}). Inference is blocked until conflict is resolved.</div>` : ""}
         ${
-          clustered
+          showLocalBulkActions
             ? `<div class="component-actions" style="margin-bottom:10px;">
           <button type="button" class="component-action-btn" data-action="apply-component-address">Apply Address To Component</button>
           <button type="button" class="component-action-btn warn" data-action="undo-component-apply" ${lastBulkIsCurrent ? "" : "disabled"}>Undo Last Bulk Apply</button>

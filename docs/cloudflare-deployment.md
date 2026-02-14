@@ -63,7 +63,7 @@ wrangler login
 
 ## Data Model
 
-Use `scripts/cloudflare-d1-schema.sql` as the base schema.
+Use the migration files in `apps/worker/migrations/` as the source of truth for schema setup.
 
 Tables include:
 
@@ -119,10 +119,10 @@ From repo root:
 
 ```bash
 cd apps/worker
-wrangler d1 execute lic-listings --file migrations/0001_initial_schema.sql
-wrangler d1 execute lic-listings --file migrations/0002_add_component_id.sql
-wrangler d1 execute lic-listings --file migrations/0003_add_bootstrap_metadata.sql
-wrangler d1 execute lic-listings --file migrations/0004_optimize_latest_assertions.sql
+wrangler d1 execute lic-listings --remote --file migrations/0001_initial_schema.sql
+wrangler d1 execute lic-listings --remote --file migrations/0002_add_component_id.sql
+wrangler d1 execute lic-listings --remote --file migrations/0003_add_bootstrap_metadata.sql
+wrangler d1 execute lic-listings --remote --file migrations/0004_optimize_latest_assertions.sql
 ```
 
 ## 4) Seed baseline graph
@@ -133,7 +133,7 @@ node scripts/generate-d1-seed-sql.cjs
 # optional full reset (destructive):
 # node scripts/generate-d1-seed-sql.cjs --destructive-reset
 cd apps/worker
-wrangler d1 execute lic-listings --file seed/seed.sql
+wrangler d1 execute lic-listings --remote --file seed/seed.sql
 ```
 
 ## 5) Build deployable static bundle
@@ -202,33 +202,6 @@ Implemented helper routes:
 1. `GET /api/health`
 2. `GET /api/bootstrap` (listings + graph payload for UI auto-load)
 3. `GET /api/geocode?address=...` (requires Access identity and `GOOGLE_MAPS_API_KEY` Worker secret)
-
-## GET `/api/listings/:id/graph`
-
-Purpose:
-
-1. Return listing neighborhood in graph
-2. Show connected listings and edge support
-
-## GET `/api/addresses/summary`
-
-Purpose:
-
-1. Return “how many listings per uncovered address”
-
-Backed by:
-
-```sql
-SELECT normalized_address, representative_address, listing_count
-FROM v_address_listing_counts;
-```
-
-## GET `/api/components/:componentId`
-
-Purpose:
-
-1. Return full component membership
-2. Return current assignment status for conflict review
 
 ## Propagation Logic (Worker)
 

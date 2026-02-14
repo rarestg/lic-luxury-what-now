@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "prepare:public": "node ../../scripts/generate-tool-config.cjs && node ../../scripts/prepare-worker-public.cjs",
-    "prepare:public:prod": "node ../../scripts/generate-tool-config.cjs && node ../../scripts/prepare-worker-public.cjs --no-data",
+    "prepare:public:prod": "LIC_FORBID_BROWSER_GOOGLE_MAPS_KEY=1 node ../../scripts/generate-tool-config.cjs && node ../../scripts/prepare-worker-public.cjs --no-data",
     "dev": "npm run prepare:public && wrangler dev",
     "deploy": "npm run prepare:public:prod && wrangler deploy",
     "dev:raw": "wrangler dev",

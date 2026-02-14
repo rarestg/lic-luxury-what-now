@@ -15,10 +15,10 @@
 ```bash
 cd apps/worker
 wrangler d1 create lic-listings
-wrangler d1 execute lic-listings --file migrations/0001_initial_schema.sql
-wrangler d1 execute lic-listings --file migrations/0002_add_component_id.sql
-wrangler d1 execute lic-listings --file migrations/0003_add_bootstrap_metadata.sql
-wrangler d1 execute lic-listings --file migrations/0004_optimize_latest_assertions.sql
+wrangler d1 execute lic-listings --remote --file migrations/0001_initial_schema.sql
+wrangler d1 execute lic-listings --remote --file migrations/0002_add_component_id.sql
+wrangler d1 execute lic-listings --remote --file migrations/0003_add_bootstrap_metadata.sql
+wrangler d1 execute lic-listings --remote --file migrations/0004_optimize_latest_assertions.sql
 ```
 
 ## 3) Seed graph/listings data
@@ -30,8 +30,10 @@ node scripts/generate-d1-seed-sql.cjs
 # optional destructive reset:
 # node scripts/generate-d1-seed-sql.cjs --destructive-reset
 cd apps/worker
-wrangler d1 execute lic-listings --file seed/seed.sql
+wrangler d1 execute lic-listings --remote --file seed/seed.sql
 ```
+
+For local D1 testing instead of the remote database, remove the `--remote` flag.
 
 ## 4) Local dev
 

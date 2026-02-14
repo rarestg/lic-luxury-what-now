@@ -233,7 +233,41 @@ function loadListingGraphFile(event) {
   reader.readAsText(file);
 }
 
+async function loadFromApiBootstrap() {
+  try {
+    const bootstrapRes = await fetch(buildApiUrl("/api/bootstrap"), {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+    if (!bootstrapRes.ok) return false;
+
+    const payload = await bootstrapRes.json();
+    if (!payload?.ok || !Array.isArray(payload.listings) || !payload.graph || typeof payload.graph !== "object") {
+      return false;
+    }
+
+    setListings(payload.listings);
+    applyGraphData(payload.graph);
+    if (isApiAssertionsEnabled() && payload.assignments && typeof payload.assignments === "object") {
+      mergeAssignments(payload.assignments);
+    }
+    hideEmptyState();
+    renderSidebar();
+    if (appState.selectedId) selectListing(appState.selectedId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function loadFromDisk() {
+  if (isApiAssertionsEnabled()) {
+    const loadedFromApi = await loadFromApiBootstrap();
+    if (loadedFromApi) return;
+  }
+
   try {
     const [listingsRes, graphRes] = await Promise.all([
       fetch("data/listings.json"),
@@ -264,38 +298,21 @@ async function loadFromDisk() {
     // fall through
   }
 
-  try {
-    const bootstrapRes = await fetch(buildApiUrl("/api/bootstrap"), {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-    });
-    if (bootstrapRes.ok) {
-      const payload = await bootstrapRes.json();
-      if (
-        payload?.ok &&
-        Array.isArray(payload.listings) &&
-        payload.graph &&
-        typeof payload.graph === "object"
-      ) {
-        setListings(payload.listings);
-        applyGraphData(payload.graph);
-        hideEmptyState();
-        renderSidebar();
-        if (appState.selectedId) selectListing(appState.selectedId);
-        return;
-      }
-    }
-  } catch {
-    // no-op
-  }
+  const loadedFromApi = await loadFromApiBootstrap();
+  if (loadedFromApi) return;
 
   console.log("Auto-load failed (local data and API bootstrap), use file picker instead");
   renderSidebar();
 }
 
 function applyAddressToCurrentComponent() {
+  if (isApiAssertionsEnabled()) {
+    alert(
+      "Bulk apply is disabled in API mode. Save an address on a listing to trigger server-side propagation.",
+    );
+    return;
+  }
+
   const key = String(appState.selectedId || "");
   if (!key) return;
   const sourceState = getListingState(key);
@@ -362,6 +379,11 @@ function applyAddressToCurrentComponent() {
 }
 
 function undoLastBulkApplyForCurrentComponent() {
+  if (isApiAssertionsEnabled()) {
+    alert("Bulk apply undo is disabled in API mode.");
+    return;
+  }
+
   const key = String(appState.selectedId || "");
   if (!key || !appState.lastBulkApply) return;
   const component = getComponentForListing(key);
