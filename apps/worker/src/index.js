@@ -41,12 +41,18 @@ function parseJwtPart(part) {
 }
 
 function normalizeTeamDomain(value) {
-  const raw = String(value || "").trim().replace(/^https?:\/\//i, "");
+  const raw = String(value || "")
+    .trim()
+    .replace(/^https?:\/\//i, "");
   return raw.replace(/\/+$/, "");
 }
 
 function isTruthy(value) {
-  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+  return ["1", "true", "yes", "on"].includes(
+    String(value || "")
+      .trim()
+      .toLowerCase(),
+  );
 }
 
 function getUnverifiedIdentityFromToken(token) {
@@ -92,7 +98,8 @@ async function getAccessJwks(teamDomain) {
       typeof key.n === "string" &&
       typeof key.e === "string",
   );
-  if (!keys.length) throw new Error("Cloudflare Access cert payload did not include usable RSA JWKs");
+  if (!keys.length)
+    throw new Error("Cloudflare Access cert payload did not include usable RSA JWKs");
 
   accessJwksCache.set(cacheKey, {
     expiresAt: now + ACCESS_JWKS_TTL_MS,
@@ -321,8 +328,9 @@ async function withComponentWriteLock(env, lockKey, fn) {
     }
   }
 
-  const err = new Error("Component write lock timeout");
-  err.code = "COMPONENT_LOCK_TIMEOUT";
+  const err = Object.assign(new Error("Component write lock timeout"), {
+    code: "COMPONENT_LOCK_TIMEOUT",
+  });
   throw err;
 }
 
