@@ -23,7 +23,7 @@ API endpoints:
 
 1. `GET /api/health` — liveness check
 2. `GET /api/bootstrap` — full listings + graph payload for UI
-3. `GET /api/geocode?address=...` — server-side geocoding proxy
+3. `GET /api/geocode?address=...` — server-side geocoding proxy (requires Access identity)
 4. `POST /api/assertions` — save address assertion, propagate to component, return deltas
 
 ## What This Repo Does
@@ -148,10 +148,13 @@ wrangler d1 create lic-listings
 wrangler d1 execute lic-listings --remote --file migrations/0001_initial_schema.sql
 wrangler d1 execute lic-listings --remote --file migrations/0002_add_component_id.sql
 wrangler d1 execute lic-listings --remote --file migrations/0003_add_bootstrap_metadata.sql
+wrangler d1 execute lic-listings --remote --file migrations/0004_optimize_latest_assertions.sql
 
-# Seed data from local graph (full reset — wipes assertions/assignments)
+# Seed data from local graph (safe default preserves assertions/assignments)
 cd ../..
 node scripts/generate-d1-seed-sql.cjs
+# Optional full reset (destructive):
+# node scripts/generate-d1-seed-sql.cjs --destructive-reset
 cd apps/worker
 wrangler d1 execute lic-listings --remote --file seed/seed.sql
 
@@ -259,15 +262,16 @@ The D1 schema (see `scripts/cloudflare-d1-schema.sql` for the consolidated refer
 
 3. **Unused image-level tables** — the initial schema includes `images`, `listing_images`, `image_hashes`, and `image_matches`. These are not currently seeded or queried; the app operates at listing-edge granularity. They exist as forward-looking schema for potential future per-image workflows but carry no runtime cost.
 
-4. **Seed is a full reset** — `generate-d1-seed-sql.cjs` produces a destructive seed (`DELETE` all rows, then `INSERT`). This wipes `address_assertions` and `listing_address_assignments`. Acceptable during initial development; will need a `--preserve-assertions` mode before reseeding a production database with real investigation work.
+4. **Seed defaults to preserving investigator work** — `generate-d1-seed-sql.cjs` now upserts `runs/listings`, refreshes `listing_edges` for the active run, and preserves `address_assertions` + `listing_address_assignments`. Use `--destructive-reset` only when you explicitly want a full wipe.
 
 ## Security
 
 1. Entire app gated by Cloudflare Access (Google OAuth + OTP)
 2. Google Maps API key stored as Worker secret, never exposed to browser
 3. `assertedBy` derived from Access JWT, not client input
-4. All D1 queries use parameterized statements
-5. Geocode endpoint uses an in-memory rate limit (30 req/min per identity, per Worker isolate)
+4. Access JWTs are verified in Worker (`CF_ACCESS_TEAM_DOMAIN` + `CF_ACCESS_AUD`)
+5. All D1 queries use parameterized statements
+6. Geocode endpoint requires Access identity and applies in-memory rate limiting (30 req/min per identity, per Worker isolate)
 
 ## Code Quality
 
