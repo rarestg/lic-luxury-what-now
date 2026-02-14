@@ -5,17 +5,22 @@ function json(data, status = 200, extraHeaders = {}) {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
-      ...extraHeaders
-    }
+      ...extraHeaders,
+    },
   });
 }
 
 function normalizeAddress(value) {
-  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 }
 
 function decodeBase64Url(input) {
-  const normalized = String(input || "").replace(/-/g, "+").replace(/_/g, "/");
+  const normalized = String(input || "")
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
   const padded = normalized + "===".slice((normalized.length + 3) % 4);
   return atob(padded);
 }
@@ -48,7 +53,9 @@ async function queryInChunks(env, buildSql, ids, extraBindPrefix = []) {
   for (let i = 0; i < ids.length; i += BIND_CHUNK_SIZE) {
     const chunk = ids.slice(i, i + BIND_CHUNK_SIZE);
     const sql = buildSql(chunk.length);
-    const result = await env.DB.prepare(sql).bind(...extraBindPrefix, ...chunk).all();
+    const result = await env.DB.prepare(sql)
+      .bind(...extraBindPrefix, ...chunk)
+      .all();
     const rows = Array.isArray(result.results) ? result.results : [];
     allRows.push(...rows);
   }
@@ -60,16 +67,14 @@ async function queryInChunks(env, buildSql, ids, extraBindPrefix = []) {
 async function ensureRun(env, runId) {
   const now = new Date().toISOString();
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO runs (id, created_at, phash_threshold, dhash_threshold, notes) VALUES (?, ?, 0, 0, ?)"
+    "INSERT OR IGNORE INTO runs (id, created_at, phash_threshold, dhash_threshold, notes) VALUES (?, ?, 0, 0, ?)",
   )
     .bind(runId, now, "Active run placeholder for live assertions")
     .run();
 }
 
 async function fetchListing(env, listingId) {
-  const row = await env.DB.prepare(
-    "SELECT id, component_id FROM listings WHERE id = ?"
-  )
+  const row = await env.DB.prepare("SELECT id, component_id FROM listings WHERE id = ?")
     .bind(listingId)
     .first();
   return row || null;
@@ -77,9 +82,7 @@ async function fetchListing(env, listingId) {
 
 async function fetchComponentMemberIds(env, componentId, listingId) {
   if (componentId == null) return [String(listingId)];
-  const result = await env.DB.prepare(
-    "SELECT id FROM listings WHERE component_id = ? ORDER BY id"
-  )
+  const result = await env.DB.prepare("SELECT id FROM listings WHERE component_id = ? ORDER BY id")
     .bind(componentId)
     .all();
   const rows = Array.isArray(result.results) ? result.results : [];
@@ -97,13 +100,13 @@ async function fetchLatestAssertionsByListing(env, listingIds) {
       WHERE listing_id IN (${sqlPlaceholders(n)})
       ORDER BY asserted_at DESC, id DESC
     `,
-    listingIds
+    listingIds,
   );
   const byListing = new Map();
   // Sort all results by asserted_at DESC, id DESC to get correct "latest" across chunks
   rows.sort((a, b) => {
     if (a.asserted_at !== b.asserted_at) return a.asserted_at > b.asserted_at ? -1 : 1;
-    return (a.id > b.id) ? -1 : 1;
+    return a.id > b.id ? -1 : 1;
   });
   for (const row of rows) {
     const id = String(row.listing_id);
@@ -111,7 +114,7 @@ async function fetchLatestAssertionsByListing(env, listingIds) {
     byListing.set(id, {
       listingId: id,
       address: String(row.address || ""),
-      normalizedAddress: String(row.normalized_address || "")
+      normalizedAddress: String(row.normalized_address || ""),
     });
   }
   return byListing;
@@ -127,7 +130,7 @@ async function fetchExistingAssignments(env, runId, listingIds) {
       WHERE run_id = ? AND listing_id IN (${sqlPlaceholders(n)})
     `,
     listingIds,
-    [runId]
+    [runId],
   );
   const byListing = new Map();
   for (const row of rows) {
@@ -135,7 +138,7 @@ async function fetchExistingAssignments(env, runId, listingIds) {
       address: String(row.address || ""),
       normalizedAddress: String(row.normalized_address || ""),
       source: String(row.source || ""),
-      confidence: Number(row.confidence)
+      confidence: Number(row.confidence),
     });
   }
   return byListing;
@@ -161,7 +164,7 @@ function buildChangedIds(previousAssignments, nextAssignments) {
 // --- Geocode rate limiter (in-memory, per-isolate) ---
 
 const geocodeRateMap = new Map(); // identity -> { count, windowStart }
-const GEOCODE_RATE_LIMIT = 30;    // requests per window
+const GEOCODE_RATE_LIMIT = 30; // requests per window
 const GEOCODE_RATE_WINDOW = 60000; // 1 minute in ms
 
 function checkGeoRate(identity) {
@@ -190,7 +193,7 @@ async function handlePostAssertions(request, env) {
 
   const listingId = String(body && body.listingId != null ? body.listingId : "").trim();
   const address = String(body && body.address != null ? body.address : "").trim();
-  const source = String(body && body.source ? body.source : "manual_ui").trim() || "manual_ui";
+  const source = String(body?.source ? body.source : "manual_ui").trim() || "manual_ui";
   if (!listingId) return json({ ok: false, error: "listingId is required" }, 400);
   if (!address) return json({ ok: false, error: "address is required" }, 400);
 
@@ -213,7 +216,7 @@ async function handlePostAssertions(request, env) {
   latestDirect.set(String(listingId), {
     listingId: String(listingId),
     address,
-    normalizedAddress
+    normalizedAddress,
   });
 
   const directAddressSet = new Set();
@@ -229,7 +232,7 @@ async function handlePostAssertions(request, env) {
         address: direct.address,
         normalizedAddress: direct.normalizedAddress,
         source: "direct",
-        confidence: 1.0
+        confidence: 1.0,
       });
     }
   } else {
@@ -240,14 +243,14 @@ async function handlePostAssertions(request, env) {
           address: direct.address,
           normalizedAddress: direct.normalizedAddress,
           source: "direct",
-          confidence: 1.0
+          confidence: 1.0,
         });
       } else {
         nextAssignments.set(id, {
           address,
           normalizedAddress,
           source: "inferred_component",
-          confidence: 0.8
+          confidence: 0.8,
         });
       }
     }
@@ -256,14 +259,14 @@ async function handlePostAssertions(request, env) {
   // Atomic batch: assertion insert + all assignment upserts in one DB.batch()
   const statements = [
     env.DB.prepare(
-      "INSERT INTO address_assertions (listing_id, address, normalized_address, source, confidence, asserted_at, asserted_by) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).bind(listingId, address, normalizedAddress, source, 1.0, now, identity)
+      "INSERT INTO address_assertions (listing_id, address, normalized_address, source, confidence, asserted_at, asserted_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ).bind(listingId, address, normalizedAddress, source, 1.0, now, identity),
   ];
   for (const [id, row] of nextAssignments.entries()) {
     statements.push(
       env.DB.prepare(
-        "INSERT OR REPLACE INTO listing_address_assignments (run_id, listing_id, address, normalized_address, source, confidence) VALUES (?, ?, ?, ?, ?, ?)"
-      ).bind(runId, id, row.address, row.normalizedAddress, row.source, row.confidence)
+        "INSERT OR REPLACE INTO listing_address_assignments (run_id, listing_id, address, normalized_address, source, confidence) VALUES (?, ?, ?, ?, ?, ?)",
+      ).bind(runId, id, row.address, row.normalizedAddress, row.source, row.confidence),
     );
   }
   await env.DB.batch(statements);
@@ -277,7 +280,7 @@ async function handlePostAssertions(request, env) {
       resolved: true,
       source: row.source,
       confidence: row.confidence,
-      updatedAt: now
+      updatedAt: now,
     };
   }
 
@@ -288,8 +291,8 @@ async function handlePostAssertions(request, env) {
       componentId,
       conflict,
       changedCount: changedListingIds.length,
-      assertedBy: identity
-    })
+      assertedBy: identity,
+    }),
   );
 
   return json({
@@ -298,7 +301,7 @@ async function handlePostAssertions(request, env) {
     componentId,
     conflict,
     changedListingIds,
-    assignments
+    assignments,
   });
 }
 
@@ -306,7 +309,7 @@ async function handleBootstrap(env) {
   const listingsRes = await env.DB.prepare(
     `SELECT id, title, source_url AS url, price, beds, baths, sqft, component_id
      FROM listings
-     ORDER BY price DESC`
+     ORDER BY price DESC`,
   ).all();
   const edgeRes = await env.DB.prepare(
     `SELECT listing_a_id AS source, listing_b_id AS target, matched_image_pairs AS matchedImagePairs,
@@ -314,14 +317,18 @@ async function handleBootstrap(env) {
             min_dhash_distance AS minDhashDistance, avg_dhash_distance AS avgDhashDistance
      FROM listing_edges
      WHERE run_id = ?
-     ORDER BY matched_image_pairs DESC`
-  ).bind(String(env.ACTIVE_RUN_ID || "active")).all();
+     ORDER BY matched_image_pairs DESC`,
+  )
+    .bind(String(env.ACTIVE_RUN_ID || "active"))
+    .all();
 
   const listings = Array.isArray(listingsRes.results) ? listingsRes.results : [];
-  const edges = Array.isArray(edgeRes.results) ? edgeRes.results.map((row) => ({
-    ...row,
-    sampleImagePairs: []
-  })) : [];
+  const edges = Array.isArray(edgeRes.results)
+    ? edgeRes.results.map((row) => ({
+        ...row,
+        sampleImagePairs: [],
+      }))
+    : [];
 
   const componentMap = new Map();
   for (const listing of listings) {
@@ -333,7 +340,7 @@ async function handleBootstrap(env) {
   const components = [...componentMap.entries()].map(([componentId, listingIds]) => ({
     componentId: String(componentId),
     listingIds,
-    size: listingIds.length
+    size: listingIds.length,
   }));
 
   return json(
@@ -342,19 +349,23 @@ async function handleBootstrap(env) {
       listings,
       graph: {
         generatedAt: new Date().toISOString(),
-        nodes: listings.map((row) => ({ id: String(row.id), title: row.title || "", url: row.url || "" })),
+        nodes: listings.map((row) => ({
+          id: String(row.id),
+          title: row.title || "",
+          url: row.url || "",
+        })),
         edges,
         components,
         totals: {
           nodes: listings.length,
           edges: edges.length,
           components: components.length,
-          isolatedListings: listings.filter((row) => row.component_id == null).length
-        }
-      }
+          isolatedListings: listings.filter((row) => row.component_id == null).length,
+        },
+      },
     },
     200,
-    { "cache-control": "public, max-age=300" }
+    { "cache-control": "public, max-age=300" },
   );
 }
 
@@ -374,17 +385,13 @@ async function handleGeocode(request, env) {
   const rawAddress = String(url.searchParams.get("address") || "").trim();
   if (!rawAddress) return json({ ok: false, error: "address query param is required" }, 400);
 
-  const geocodeUrl =
-    "https://maps.googleapis.com/maps/api/geocode/json?address=" +
-    encodeURIComponent(rawAddress) +
-    "&key=" +
-    encodeURIComponent(googleApiKey);
+  const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(rawAddress)}&key=${encodeURIComponent(googleApiKey)}`;
 
   const upstream = await fetch(geocodeUrl, {
     method: "GET",
     headers: {
-      "accept": "application/json"
-    }
+      accept: "application/json",
+    },
   });
   if (!upstream.ok) {
     return json({ ok: false, error: `Google geocode HTTP ${upstream.status}` }, 502);
@@ -394,10 +401,13 @@ async function handleGeocode(request, env) {
   if (payload.status === "OK" && Array.isArray(payload.results) && payload.results.length > 0) {
     return json({
       ok: true,
-      address: String(payload.results[0].formatted_address || "").trim()
+      address: String(payload.results[0].formatted_address || "").trim(),
     });
   }
-  return json({ ok: false, error: "No geocode result found", status: payload.status || "UNKNOWN" }, 404);
+  return json(
+    { ok: false, error: "No geocode result found", status: payload.status || "UNKNOWN" },
+    404,
+  );
 }
 
 // --- Router with top-level error handling ---
@@ -423,16 +433,18 @@ export default {
         return await handlePostAssertions(request, env);
       }
     } catch (err) {
-      console.error(JSON.stringify({
-        event: "error",
-        path: url.pathname,
-        method: request.method,
-        message: err.message,
-        stack: err.stack
-      }));
+      console.error(
+        JSON.stringify({
+          event: "error",
+          path: url.pathname,
+          method: request.method,
+          message: err.message,
+          stack: err.stack,
+        }),
+      );
       return json({ ok: false, error: "Internal server error" }, 500);
     }
 
     return json({ ok: false, error: "Not found" }, 404);
-  }
+  },
 };
