@@ -137,6 +137,7 @@ function renderEdgeEvidenceSection(selectedListingId, evidence) {
       const strength = String(item.strength || "Weak");
       const strengthClass = strength.toLowerCase();
 
+      // `getEdgeEvidence()` normalizes this to an array, so `.map()` is safe here.
       const pairRows = item.sampleImagePairs
         .map((pair) => {
           const urlA = safeUrl(pair?.urlA);

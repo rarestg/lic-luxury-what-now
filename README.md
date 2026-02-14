@@ -139,14 +139,17 @@ Output: `data/hash-graph/address-propagation.json`
 npm install -g wrangler
 wrangler login
 
-# Create D1 and apply migrations
+# Create D1 and apply migrations (executed manually via wrangler d1 execute,
+# not wrangler d1 migrations apply — migration tracking uses a hand-rolled
+# _migrations table inside the schema files themselves)
 cd apps/worker
 wrangler d1 create lic-listings
 # → copy database_id into wrangler.jsonc
 wrangler d1 execute lic-listings --remote --file migrations/0001_initial_schema.sql
 wrangler d1 execute lic-listings --remote --file migrations/0002_add_component_id.sql
+wrangler d1 execute lic-listings --remote --file migrations/0003_add_bootstrap_metadata.sql
 
-# Seed data from local graph
+# Seed data from local graph (full reset — wipes assertions/assignments)
 cd ../..
 node scripts/generate-d1-seed-sql.cjs
 cd apps/worker
@@ -156,11 +159,8 @@ wrangler d1 execute lic-listings --remote --file seed/seed.sql
 wrangler secret put GOOGLE_MAPS_API_KEY
 
 # Build and deploy
-cd ../..
-node scripts/generate-tool-config.cjs
-node scripts/prepare-worker-public.cjs --no-data
-cd apps/worker
-wrangler deploy
+cd /path/to/lic-listings/apps/worker
+npm run deploy
 ```
 
 ### CI/CD (Cloudflare Builds)
@@ -181,11 +181,8 @@ Build variables: `LIC_GEOCODE_ENDPOINT=/api/geocode`, `LIC_USE_API_ASSERTIONS=1`
 # Configure UI for API mode
 cp .env.example .env
 # Edit: LIC_USE_API_ASSERTIONS=1, LIC_GEOCODE_ENDPOINT=/api/geocode
-node scripts/generate-tool-config.cjs
-node scripts/prepare-worker-public.cjs
-
 cd apps/worker
-wrangler dev
+npm run dev
 ```
 
 Or serve the UI locally without the Worker:
@@ -251,6 +248,18 @@ Propagation flow on `POST /api/assertions`:
 7. Return changed assignments for immediate UI merge
 
 All writes (assertion + assignments) execute in a single atomic `DB.batch()`.
+
+## Data Model
+
+The D1 schema (see `scripts/cloudflare-d1-schema.sql` for the consolidated reference) has a few intentional design choices worth noting:
+
+1. **Denormalized `metadata_json` on listings** — `listings` has structured columns (`price`, `beds`, `baths`, etc.) for queries and filtering, plus a `metadata_json` TEXT column that stores the full listing payload. `/api/bootstrap` reads `metadata_json` to serve the complete UI payload in a single query without joins. The structured columns and JSON blob are seeded from the same source (`data/listings.json`), so they stay consistent.
+
+2. **`sample_image_pairs_json` on edges** — same pattern: the edge table has numeric summary columns for queries, plus a JSON blob for the sample image pairs the UI displays as evidence. Seeded from `listing-graph.json`.
+
+3. **Unused image-level tables** — the initial schema includes `images`, `listing_images`, `image_hashes`, and `image_matches`. These are not currently seeded or queried; the app operates at listing-edge granularity. They exist as forward-looking schema for potential future per-image workflows but carry no runtime cost.
+
+4. **Seed is a full reset** — `generate-d1-seed-sql.cjs` produces a destructive seed (`DELETE` all rows, then `INSERT`). This wipes `address_assertions` and `listing_address_assignments`. Acceptable during initial development; will need a `--preserve-assertions` mode before reseeding a production database with real investigation work.
 
 ## Security
 

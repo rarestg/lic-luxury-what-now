@@ -24,8 +24,15 @@ export function normalizeListingState(value) {
   const notes = typeof raw.notes === "string" ? raw.notes : "";
   const source = typeof raw.source === "string" ? raw.source : "";
   const updatedAt = typeof raw.updatedAt === "string" ? raw.updatedAt : "";
-  const confidenceNum = Number(raw.confidence);
-  const confidence = Number.isFinite(confidenceNum) ? confidenceNum : null;
+  const hasConfidence = Object.prototype.hasOwnProperty.call(raw, "confidence");
+  const rawConfidence = hasConfidence ? raw.confidence : undefined;
+  const confidenceNum = Number(rawConfidence);
+  const confidence =
+    rawConfidence == null || rawConfidence === ""
+      ? null
+      : Number.isFinite(confidenceNum)
+        ? confidenceNum
+        : null;
   const resolved = Boolean(raw.resolved && address.trim());
   return { address, notes, resolved, source, updatedAt, confidence };
 }
@@ -65,7 +72,11 @@ export function loadState() {
 }
 
 export function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(appState.state));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(appState.state));
+  } catch (err) {
+    console.warn("Failed to persist state to localStorage", { key: STORAGE_KEY, error: err });
+  }
 }
 
 export function getListingState(id) {
@@ -84,12 +95,25 @@ export function mergeAssignments(assignments) {
     const key = String(id);
     const incoming = normalizeListingState(incomingRaw);
     const existing = getListingState(key);
+    if (incoming.resolved) {
+      appState.state[key] = normalizeListingState({
+        address: incoming.address,
+        resolved: true,
+        notes: existing.notes || "",
+        source: incoming.source || existing.source || "",
+        confidence: incoming.confidence != null ? incoming.confidence : existing.confidence,
+        updatedAt: incoming.updatedAt || existing.updatedAt || nowIso(),
+      });
+      continue;
+    }
+
+    // Explicit unresolved delta from API means prior assignment should be cleared.
     appState.state[key] = normalizeListingState({
-      address: incoming.address,
-      resolved: incoming.resolved,
+      address: "",
+      resolved: false,
       notes: existing.notes || "",
-      source: incoming.source || existing.source || "",
-      confidence: incoming.confidence != null ? incoming.confidence : existing.confidence,
+      source: "",
+      confidence: null,
       updatedAt: incoming.updatedAt || existing.updatedAt || nowIso(),
     });
   }

@@ -13,6 +13,7 @@ cd apps/worker
 wrangler d1 create lic-listings
 wrangler d1 execute lic-listings --file migrations/0001_initial_schema.sql
 wrangler d1 execute lic-listings --file migrations/0002_add_component_id.sql
+wrangler d1 execute lic-listings --file migrations/0003_add_bootstrap_metadata.sql
 ```
 
 ## 3) Seed graph/listings data
@@ -27,34 +28,38 @@ wrangler d1 execute lic-listings --file seed/seed.sql
 
 ## 4) Local dev
 
-Prepare static assets bundle first:
+`npm run dev` in `apps/worker` auto-generates `tool/config.local.js` and rebuilds
+`apps/worker/public` before starting Wrangler.
 
 ```bash
 cd /path/to/lic-listings
 # optional: enable API save mode in UI
 # cp .env.example .env
 # set LIC_USE_API_ASSERTIONS=1 and optionally LIC_API_BASE_URL=
-# node scripts/generate-tool-config.cjs
-node scripts/prepare-worker-public.cjs
+cd apps/worker
+npm run dev
 ```
 
-Then run dev server:
+If you intentionally want to skip the bundle refresh, use:
 
 ```bash
-cd apps/worker
-wrangler dev
+npm run dev:raw
 ```
 
 ## 5) Deploy
 
+`npm run deploy` in `apps/worker` auto-generates `tool/config.local.js` and rebuilds
+`apps/worker/public` with `--no-data` before deploy.
+
 ```bash
-cd /path/to/lic-listings
-# Production: skip static data files, UI loads from /api/bootstrap
-node scripts/prepare-worker-public.cjs --no-data
-# Dev/offline fallback: include static data files
-# node scripts/prepare-worker-public.cjs
-cd apps/worker
-wrangler deploy
+cd /path/to/lic-listings/apps/worker
+npm run deploy
+```
+
+If you intentionally want to skip the bundle refresh, use:
+
+```bash
+npm run deploy:raw
 ```
 
 ## API endpoints

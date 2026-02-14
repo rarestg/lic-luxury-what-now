@@ -68,9 +68,10 @@ function computeComponentsFromAdjacency() {
     const queue = [id];
     visited.add(id);
     const memberIds = [];
+    let queueIdx = 0;
 
-    while (queue.length) {
-      const current = queue.shift();
+    while (queueIdx < queue.length) {
+      const current = queue[queueIdx++];
       memberIds.push(current);
       const neighbors = appState.graphAdjacency[current] || new Set();
       for (const n of neighbors) {

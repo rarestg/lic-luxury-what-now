@@ -128,11 +128,11 @@ Output includes:
 
 ## 6) Packaging/Seeding Utilities
 
-1. `scripts/generate-d1-seed-sql.js`
+1. `scripts/generate-d1-seed-sql.cjs`
 2. Reads `data/listings.json` + `data/hash-graph/listing-graph.json`
 3. Writes `apps/worker/seed/seed.sql` with active run + listings + edges + component ids
 
-1. `scripts/prepare-worker-public.js`
+1. `scripts/prepare-worker-public.cjs`
 2. Builds `apps/worker/public/` from local UI + minimal static data bundle
 
 ## 7) Code Quality Tooling Added
@@ -179,6 +179,6 @@ Note: this directory was not originally a git repo; it has now been initialized 
 3. `apps/worker/wrangler.jsonc`
 4. `apps/worker/migrations/0001_initial_schema.sql`
 5. `apps/worker/migrations/0002_add_component_id.sql`
-6. `scripts/generate-d1-seed-sql.js`
-7. `scripts/prepare-worker-public.js`
+6. `scripts/generate-d1-seed-sql.cjs`
+7. `scripts/prepare-worker-public.cjs`
 8. `docs/cloudflare-deployment.md`

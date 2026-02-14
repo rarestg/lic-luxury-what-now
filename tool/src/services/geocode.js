@@ -35,7 +35,10 @@ export async function geocodeWithGoogle(raw, apiKey) {
   if (!res.ok) throw new Error(`Google geocoding returned HTTP ${res.status}`);
   const payload = await res.json();
   if (payload.status === "OK" && Array.isArray(payload.results) && payload.results.length > 0) {
-    return payload.results[0].formatted_address;
+    const formatted = payload.results[0]?.formatted_address;
+    if (typeof formatted === "string" && formatted.trim()) {
+      return formatted.trim();
+    }
   }
   return null;
 }

@@ -14,19 +14,19 @@ import { updateStats } from "./stats.js";
 export function getStatusFilterValue() {
   const el = document.getElementById("filter-status");
   if (!(el instanceof HTMLSelectElement)) return "all";
-  return el ? el.value : "all";
+  return el.value;
 }
 
 export function getBedsFilterValue() {
   const el = document.getElementById("filter-beds");
   if (!(el instanceof HTMLSelectElement)) return "all";
-  return el ? el.value : "all";
+  return el.value;
 }
 
 export function getSearchFilterValue() {
   const el = document.getElementById("filter-search");
   if (!(el instanceof HTMLInputElement)) return "";
-  return el ? el.value.toLowerCase() : "";
+  return el.value.toLowerCase();
 }
 
 function listingMatchesFilters(listing, statusFilter, bedsFilter, searchFilter) {
@@ -148,6 +148,7 @@ function buildClusterGroups(filteredListings) {
 function renderClusterOverview(groups) {
   const clustered = groups.filter((g) => !g.unclustered);
   if (!clustered.length) return "";
+  const unclusteredGroup = groups.find((g) => g.unclustered);
 
   return `<div class="cluster-overview">
     <h3>Cluster Navigator</h3>
@@ -164,11 +165,7 @@ function renderClusterOverview(groups) {
         </button>`;
         })
         .join("")}
-      ${
-        groups.some((g) => g.unclustered)
-          ? `<button type="button" class="cluster-jump ${appState.focusedClusterKey === "unclustered" ? "active" : ""}" data-action="focus-cluster" data-cluster-key="unclustered">Unclustered · ${groups.find((g) => g.unclustered).members.length}</button>`
-          : ""
-      }
+      ${unclusteredGroup ? `<button type="button" class="cluster-jump ${appState.focusedClusterKey === "unclustered" ? "active" : ""}" data-action="focus-cluster" data-cluster-key="unclustered">Unclustered · ${unclusteredGroup.members.length}</button>` : ""}
     </div>
   </div>`;
 }
@@ -234,6 +231,7 @@ export function updateViewModeButtons() {
 
 export function renderSidebar() {
   const sidebar = document.getElementById("sidebar");
+  if (!sidebar) return;
   updateViewModeButtons();
 
   if (!appState.listings.length) {
