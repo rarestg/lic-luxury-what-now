@@ -1,151 +1,104 @@
 # LIC Listings Investigator
 
-Local investigation toolkit for rental listings from `luxuryapartmentslic.com`, including:
+Investigation toolkit for rental listings from `luxuryapartmentslic.com`. Combines offline scraping with a live Cloudflare-backed investigation UI.
 
 1. Idempotent scraping of listing detail pages
 2. Markdown-to-JSON extraction
-3. Single-file investigation UI for manual address resolution
-4. Perceptual image hashing pipeline to infer listing-to-listing relationships
+3. Perceptual image hashing pipeline to infer listing-to-listing relationships
+4. Investigation UI with graph-driven clustering, address resolution, and live persistence via Cloudflare D1
+
+## Live Deployment
+
+The app is deployed on Cloudflare Workers with Cloudflare Access authentication.
+
+| Resource | Details |
+|----------|---------|
+| **URL** | `https://lic-listings-worker.rarestg.workers.dev` |
+| **Auth** | Cloudflare Access (Google OAuth + OTP) |
+| **Database** | Cloudflare D1 (253 listings, 1,567 edges, 38 components) |
+| **Geocoding** | Server-side via `/api/geocode` (Google Maps key in Worker secret) |
+| **CI/CD** | Push to `main` auto-deploys via Cloudflare Builds |
+
+API endpoints:
+
+1. `GET /api/health` — liveness check
+2. `GET /api/bootstrap` — full listings + graph payload for UI
+3. `GET /api/geocode?address=...` — server-side geocoding proxy
+4. `POST /api/assertions` — save address assertion, propagate to component, return deltas
 
 ## What This Repo Does
-
-The repository is optimized for a practical workflow:
 
 1. Pull listings and media metadata from the source website
 2. Normalize listing data into JSON for fast local inspection
 3. Use reverse image search (Google Lens) to identify true addresses
 4. Use perceptual image similarity to connect listings that likely represent the same real location
-5. Propagate known addresses across connected listing clusters
+5. Propagate known addresses across connected listing clusters — locally or live via the Worker API
 
 ## Repository Layout
 
 ```text
 .
-├── .firecrawl/listings/            # Raw scraped markdown detail pages
+├── apps/worker/                   # Cloudflare Worker (API + static hosting)
+│   ├── src/index.js               # Router, D1 queries, propagation logic
+│   ├── migrations/                # D1 schema migrations
+│   ├── seed/                      # Generated seed SQL (gitignored)
+│   ├── public/                    # Built static bundle (gitignored)
+│   └── wrangler.jsonc             # Worker config with D1 binding
 ├── data/
-│   ├── all-listing-urls.txt        # Source listing URLs
-│   ├── listings.json               # Structured listing records
-│   ├── image-map.json              # imageURL -> [listingIds]
-│   ├── hash-graph/                 # Perceptual hashing outputs
-│   ├── images-cache/               # Downloaded image cache for hashing
-│   ├── page-*.html                 # Cached search pages
-│   └── scrape-progress.log
+│   ├── all-listing-urls.txt       # Source listing URLs
+│   ├── listings.json              # Structured listing records (generated)
+│   ├── image-map.json             # imageURL -> [listingIds] (generated)
+│   ├── hash-graph/                # Perceptual hashing outputs (generated)
+│   ├── images-cache/              # Downloaded image cache (generated)
+│   └── page-*.html                # Cached search pages
+├── docs/
+│   └── cloudflare-deployment.md   # Full deployment guide
 ├── scripts/
-│   ├── scrape-all.sh               # Batch detail-page scraper (idempotent)
-│   ├── parse-listings.js           # Markdown parser (idempotent)
-│   ├── analyze-images.js           # Legacy asset-prefix analysis
-│   ├── build-image-graph.py        # New perceptual image graph pipeline
-│   ├── cloudflare-d1-schema.sql    # Proposed D1 schema for production
-│   └── README-image-graph.md       # Focused hashing script notes
+│   ├── scrape-all.sh              # Batch detail-page scraper (idempotent)
+│   ├── parse-listings.js          # Markdown parser (idempotent)
+│   ├── build-image-graph.py       # Perceptual image graph pipeline
+│   ├── generate-d1-seed-sql.cjs   # Generate D1 seed from local data
+│   ├── generate-tool-config.cjs   # Generate UI config from .env or env vars
+│   ├── prepare-worker-public.cjs  # Build Worker static asset bundle
+│   └── cloudflare-d1-schema.sql   # Reference D1 schema
 └── tool/
-    ├── index.html                  # Single-file investigator UI
-    └── data -> ../data             # Symlink for local serving
+    ├── index.html                 # Single-file investigator UI
+    └── data -> ../data            # Symlink for local serving
 ```
 
-## Current Dataset Snapshot
+## Offline Pipeline
 
-As of the latest local run:
-
-1. Listings: `253`
-2. Unique image URLs: `4081`
-3. Listings with sqft: `64`
-4. Graph nodes: `253`
-5. Graph edges: `1567`
-6. Graph components: `38`
-7. Isolated listings: `7`
-8. Matched image pairs: `22804`
-
-## End-to-End Pipeline
-
-## 1) Scrape listing detail pages
-
-Command:
+### 1) Scrape listing detail pages
 
 ```bash
 bash scripts/scrape-all.sh
 ```
 
-Behavior:
-
 1. Reads `data/all-listing-urls.txt`
 2. Scrapes in parallel batches (`BATCH_SIZE=5`)
 3. Skips already-present non-empty markdown files
-4. Tracks per-job failure and exits non-zero if any scrape fails
-5. Removes empty/failed output files so reruns can recover cleanly
+4. Removes empty/failed output files so reruns can recover cleanly
 
-Output:
+Output: `.firecrawl/listings/<listingId>.md`
 
-1. `.firecrawl/listings/<listingId>.md`
-
-## 2) Parse markdown into structured JSON
-
-Command:
+### 2) Parse markdown into structured JSON
 
 ```bash
 node scripts/parse-listings.js
 ```
 
-Behavior:
-
 1. Parses all `.md` files in `.firecrawl/listings`
-2. Extracts fields such as price, beds, baths, neighborhood, features, flags, description, and image URLs
+2. Extracts fields: price, beds, baths, neighborhood, features, flags, description, image URLs
 3. Builds `image-map.json` as `imageURL -> [listingIds]`
-4. Sorts listings by price descending
-5. Overwrites outputs deterministically on each run
 
-Outputs:
+Outputs: `data/listings.json`, `data/image-map.json`
 
-1. `data/listings.json`
-2. `data/image-map.json`
-
-## 3) Investigate and annotate in local UI
-
-Serve repo root:
-
-```bash
-cd /path/to/lic-listings
-python3 -m http.server 8000
-```
-
-Open:
-
-1. `http://localhost:8000/tool/`
-
-Configure geocoding (recommended before use):
-
-```bash
-cp .env.example .env
-# Set LIC_GEOCODE_ENDPOINT (recommended for Cloudflare) or LIC_GOOGLE_MAPS_API_KEY
-# Optional cloud save flags: LIC_USE_API_ASSERTIONS=1 and LIC_API_BASE_URL=
-node scripts/generate-tool-config.cjs
-```
-
-UI capabilities:
-
-1. Sidebar filtering by status, beds, and search
-2. Address + notes per listing persisted in `localStorage`
-3. Export/import state JSON for backups
-4. Google Lens links for every listing image
-5. Graph-only connected-listings counts and cluster indicators
-6. Component panel with full member navigation and resolved/unresolved workload
-7. Connected-listing edge evidence (`matchedImagePairs`, hash distance stats, sample URL pairs, strength labels)
-8. Local-first bulk apply to unresolved listings in a component with conflict blocking + single-step undo
-
-## 4) Build perceptual image graph
-
-Install dependencies:
+### 3) Build perceptual image graph
 
 ```bash
 pip3 install imagehash pillow
-```
-
-Run:
-
-```bash
 python3 scripts/build-image-graph.py
 ```
-
-What it does:
 
 1. Downloads all unique images in parallel to `data/images-cache`
 2. Computes `pHash` and `dHash`
@@ -153,13 +106,9 @@ What it does:
 4. Creates listing graph edges from image matches
 5. Computes connected components
 
-Outputs:
+Outputs: `data/hash-graph/image-hashes.json`, `data/hash-graph/image-similarity.json`, `data/hash-graph/listing-graph.json`
 
-1. `data/hash-graph/image-hashes.json`
-2. `data/hash-graph/image-similarity.json`
-3. `data/hash-graph/listing-graph.json`
-
-Useful options:
+Options:
 
 ```bash
 python3 scripts/build-image-graph.py --skip-download
@@ -167,9 +116,7 @@ python3 scripts/build-image-graph.py --phash-threshold 6 --dhash-threshold 8
 python3 scripts/build-image-graph.py --max-image-matches-output 10000
 ```
 
-## 5) Propagate known addresses from seed data
-
-If you exported state from the UI and it includes resolved addresses:
+### 4) Propagate known addresses from seed data
 
 ```bash
 python3 scripts/build-image-graph.py \
@@ -177,105 +124,139 @@ python3 scripts/build-image-graph.py \
   --seed-addresses /path/to/lic-investigator-state.json
 ```
 
-Additional output:
+Output: `data/hash-graph/address-propagation.json`
 
-1. `data/hash-graph/address-propagation.json`
+## Cloud Deployment
 
-This file contains:
+### Quick start
 
-1. Direct assignments from seed addresses
-2. Inferred assignments for connected listings
-3. Per-address listing totals
-4. Conflict components when multiple addresses appear in one component
+```bash
+# Install and authenticate
+npm install -g wrangler
+wrangler login
+
+# Create D1 and apply migrations
+cd apps/worker
+wrangler d1 create lic-listings
+# → copy database_id into wrangler.jsonc
+wrangler d1 execute lic-listings --remote --file migrations/0001_initial_schema.sql
+wrangler d1 execute lic-listings --remote --file migrations/0002_add_component_id.sql
+
+# Seed data from local graph
+cd ../..
+node scripts/generate-d1-seed-sql.cjs
+cd apps/worker
+wrangler d1 execute lic-listings --remote --file seed/seed.sql
+
+# Set secrets
+wrangler secret put GOOGLE_MAPS_API_KEY
+
+# Build and deploy
+cd ../..
+node scripts/generate-tool-config.cjs
+node scripts/prepare-worker-public.cjs --no-data
+cd apps/worker
+wrangler deploy
+```
+
+### CI/CD (Cloudflare Builds)
+
+Push to `main` auto-deploys. Build config:
+
+| Field | Value |
+|-------|-------|
+| Root directory | `/` |
+| Build command | `node scripts/generate-tool-config.cjs && node scripts/prepare-worker-public.cjs --no-data` |
+| Deploy command | `npx wrangler deploy` |
+
+Build variables: `LIC_GEOCODE_ENDPOINT=/api/geocode`, `LIC_USE_API_ASSERTIONS=1`
+
+### Local development
+
+```bash
+# Configure UI for API mode
+cp .env.example .env
+# Edit: LIC_USE_API_ASSERTIONS=1, LIC_GEOCODE_ENDPOINT=/api/geocode
+node scripts/generate-tool-config.cjs
+node scripts/prepare-worker-public.cjs
+
+cd apps/worker
+wrangler dev
+```
+
+Or serve the UI locally without the Worker:
+
+```bash
+python3 -m http.server 8000
+# Open http://localhost:8000/tool/
+```
+
+See `docs/cloudflare-deployment.md` for the full deployment guide.
+
+## Investigation UI
+
+The UI (`tool/index.html`) supports two modes:
+
+1. **Local-only** — saves to `localStorage` (default when `LIC_USE_API_ASSERTIONS` is off)
+2. **API-backed** — saves to D1 via `POST /api/assertions`, propagates to component members, merges deltas into local state
+
+UI capabilities:
+
+1. Sidebar filtering by status, beds, and search
+2. Google Lens links for every listing image
+3. Component panel with member navigation and resolved/unresolved counts
+4. Edge evidence with strength labels, hash distances, and sample image pairs
+5. Bulk apply address to unresolved listings in a component with conflict blocking + single-step undo
+6. Export/import state JSON for backups
 
 ## Graph Concepts
 
 Terminology used by `listing-graph.json`:
 
-1. Node: one listing (`id`)
-2. Edge: two listings connected by similar images under hash thresholds
-3. Component: connected cluster of listings
+1. **Node**: one listing
+2. **Edge**: two listings connected by similar images under hash thresholds
+3. **Component**: connected cluster of listings
 
-Important interpretation note:
+Important: components are not guaranteed 1:1 with buildings. One building can split into multiple components, and multiple buildings can merge if they reuse similar/model images. Treat components as clustering signals, then validate with manual Lens evidence.
 
-1. Components are not guaranteed 1:1 with buildings
-2. One building can split into multiple components
-3. Multiple buildings can merge if they reuse similar/model images
+## Architecture
 
-Treat components as high-value clustering signals, then validate with manual Lens evidence.
-
-## Local Data Contracts
-
-`data/listings.json`:
-
-1. Array of listing objects
-2. Includes `id`, `title`, `price`, `beds`, `baths`, `sqft`, `imageUrls`, and more
-
-`data/image-map.json`:
-
-1. Object keyed by image URL
-2. Value is array of listing IDs that reference that image URL
-
-`data/hash-graph/listing-graph.json`:
-
-1. `nodes`: listing-level graph nodes
-2. `edges`: weighted listing connections via matched images
-3. `components`: connected clusters
-4. `totals`: graph-level metrics
-
-## Security and Operational Notes
-
-1. Browser geocoding is now config-driven via `tool/config.local.js` (generated from `.env`)
-2. For Cloudflare deployment, prefer `LIC_GEOCODE_ENDPOINT` and keep Google keys server-side only
-3. Treat UI import files as untrusted input; current UI includes sanitization improvements
-4. Large files in `data/images-cache` and `data/hash-graph` are generated artifacts
-
-## Troubleshooting
-
-Scrape script exits non-zero:
-
-1. Check terminal errors for failed URLs
-2. Re-run `bash scripts/scrape-all.sh`; failed outputs are removed automatically for retry
-
-Parser output looks stale:
-
-1. Re-run `node scripts/parse-listings.js`
-
-Hash graph run is slow:
-
-1. First run downloads all images
-2. Use `--skip-download` for iterative reruns
-3. Use lower `--max-image-matches-output` if output size is too large
-
-## Cloud Deployment
-
-See `docs/cloudflare-deployment.md` for:
-
-1. Required Cloudflare services
-2. D1 schema and data flow
-3. Live propagation API design
-4. Deployment and operations checklist
-
-Quick start (Worker + D1):
-
-```bash
-# from repo root
-node scripts/generate-d1-seed-sql.cjs
-node scripts/prepare-worker-public.cjs
-
-cd apps/worker
-# apply migrations
-wrangler d1 execute lic-listings --file migrations/0001_initial_schema.sql
-wrangler d1 execute lic-listings --file migrations/0002_add_component_id.sql
-# seed data
-wrangler d1 execute lic-listings --file seed/seed.sql
-# deploy
-wrangler deploy
+```
+┌─────────────┐     ┌──────────────────────────┐
+│  Browser UI  │────▶│  Cloudflare Worker        │
+│  index.html  │◀────│  /api/assertions          │
+└─────────────┘     │  /api/bootstrap           │
+                    │  /api/geocode             │
+                    └──────────┬───────────────┘
+                               │
+                    ┌──────────▼───────────────┐
+                    │  Cloudflare D1            │
+                    │  listings, edges,         │
+                    │  assertions, assignments  │
+                    └──────────────────────────┘
 ```
 
-## Code Quality
+Propagation flow on `POST /api/assertions`:
 
-Root JS tooling is configured with Biome + TypeScript `checkJs`:
+1. Validate Access JWT identity
+2. Normalize address
+3. Insert assertion into `address_assertions`
+4. Look up listing's component via `component_id`
+5. If one normalized address in component → infer assignments to all members
+6. If multiple addresses → mark conflict, assign only direct assertions
+7. Return changed assignments for immediate UI merge
+
+All writes (assertion + assignments) execute in a single atomic `DB.batch()`.
+
+## Security
+
+1. Entire app gated by Cloudflare Access (Google OAuth + OTP)
+2. Google Maps API key stored as Worker secret, never exposed to browser
+3. `assertedBy` derived from Access JWT, not client input
+4. All D1 queries use parameterized statements
+5. Geocode endpoint rate-limited (30 req/min per identity)
+
+## Code Quality
 
 ```bash
 npm install
@@ -286,4 +267,15 @@ npm run check
 npm run check:fix
 ```
 
-Pre-commit hooks are configured via `lefthook.yml`. In non-git directories, hook install is skipped automatically.
+Pre-commit hooks configured via `lefthook.yml`.
+
+## Dataset Snapshot
+
+| Metric | Value |
+|--------|-------|
+| Listings | 253 |
+| Unique image URLs | 4,081 |
+| Graph edges | 1,567 |
+| Graph components | 38 |
+| Isolated listings | 7 |
+| Matched image pairs | 22,804 |
