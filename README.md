@@ -62,7 +62,11 @@ API endpoints:
 │   ├── prepare-worker-public.cjs  # Build Worker static asset bundle
 │   └── cloudflare-d1-schema.sql   # Reference D1 schema
 └── tool/
-    ├── index.html                 # Single-file investigator UI
+    ├── index.html                 # Investigator HTML shell
+    ├── config.js                  # Default runtime config
+    ├── config.local.js            # Generated local/runtime overrides (optional)
+    ├── styles/main.css            # UI styles
+    ├── src/                       # Modular browser app (state/model/ui/services)
     └── data -> ../data            # Symlink for local serving
 ```
 
@@ -195,7 +199,7 @@ See `docs/cloudflare-deployment.md` for the full deployment guide.
 
 ## Investigation UI
 
-The UI (`tool/index.html`) supports two modes:
+The UI entrypoint (`tool/index.html`) loads modular browser code from `tool/src/` and supports two modes:
 
 1. **Local-only** — saves to `localStorage` (default when `LIC_USE_API_ASSERTIONS` is off)
 2. **API-backed** — saves to D1 via `POST /api/assertions`, propagates to component members, merges deltas into local state
@@ -254,7 +258,7 @@ All writes (assertion + assignments) execute in a single atomic `DB.batch()`.
 2. Google Maps API key stored as Worker secret, never exposed to browser
 3. `assertedBy` derived from Access JWT, not client input
 4. All D1 queries use parameterized statements
-5. Geocode endpoint rate-limited (30 req/min per identity)
+5. Geocode endpoint uses an in-memory rate limit (30 req/min per identity, per Worker isolate)
 
 ## Code Quality
 

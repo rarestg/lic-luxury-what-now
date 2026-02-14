@@ -144,9 +144,11 @@ node scripts/prepare-worker-public.cjs
 
 1. `index.html`
 2. `config.js`
-3. `config.local.js` (copied if present; otherwise generated empty)
-4. `data/listings.json`
-5. `data/hash-graph/listing-graph.json`
+3. `styles/main.css`
+4. `src/*` browser modules
+5. `config.local.js` (copied if present; otherwise generated empty)
+6. `data/listings.json`
+7. `data/hash-graph/listing-graph.json`
 
 ## API Design
 
