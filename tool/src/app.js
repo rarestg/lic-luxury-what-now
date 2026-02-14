@@ -282,13 +282,22 @@ async function loadFromApiBootstrap() {
     if (!bootstrapRes.ok) return false;
 
     const payload = await bootstrapRes.json();
-    if (!payload?.ok || !Array.isArray(payload.listings) || !payload.graph || typeof payload.graph !== "object") {
+    if (
+      !payload?.ok ||
+      !Array.isArray(payload.listings) ||
+      !payload.graph ||
+      typeof payload.graph !== "object"
+    ) {
       return false;
     }
 
     setListings(payload.listings);
     applyGraphData(payload.graph);
-    if (isApiAssertionsEnabled() && payload.assignments && typeof payload.assignments === "object") {
+    if (
+      isApiAssertionsEnabled() &&
+      payload.assignments &&
+      typeof payload.assignments === "object"
+    ) {
       mergeAssignments(payload.assignments);
     }
     hideEmptyState();

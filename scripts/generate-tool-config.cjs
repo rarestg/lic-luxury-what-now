@@ -38,7 +38,11 @@ function resolve(fileEnv, key) {
 }
 
 function isTruthy(value) {
-  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+  return ["1", "true", "yes", "on"].includes(
+    String(value || "")
+      .trim()
+      .toLowerCase(),
+  );
 }
 
 function main() {
@@ -52,7 +56,9 @@ function main() {
   const geocodeEndpoint = resolve(fileEnv, "LIC_GEOCODE_ENDPOINT");
   const googleMapsApiKey = resolve(fileEnv, "LIC_GOOGLE_MAPS_API_KEY");
   const apiBaseUrl = resolve(fileEnv, "LIC_API_BASE_URL");
-  const forbidBrowserGoogleMapsKey = isTruthy(resolve(fileEnv, "LIC_FORBID_BROWSER_GOOGLE_MAPS_KEY"));
+  const forbidBrowserGoogleMapsKey = isTruthy(
+    resolve(fileEnv, "LIC_FORBID_BROWSER_GOOGLE_MAPS_KEY"),
+  );
   const useApiAssertions = ["1", "true", "yes", "on"].includes(
     resolve(fileEnv, "LIC_USE_API_ASSERTIONS").toLowerCase(),
   );

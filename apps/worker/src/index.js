@@ -83,9 +83,7 @@ function audienceIncludes(audClaim, expectedAud) {
 }
 
 function isValidAccessTeamDomain(teamDomain) {
-  return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.cloudflareaccess\.com$/.test(
-    String(teamDomain || ""),
-  );
+  return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.cloudflareaccess\.com$/.test(String(teamDomain || ""));
 }
 
 function makeAccessAuthError(code, status, message) {
@@ -292,7 +290,8 @@ async function getIdentityFromAccessJwt(request, env) {
 function accessAuthFailureResponse(err) {
   const status = Number(err?.status);
   const isConfigError = err?.code === "ACCESS_CONFIG_ERROR";
-  const isUpstreamError = err?.code === "ACCESS_JWKS_UPSTREAM_ERROR" || err?.code === "ACCESS_VERIFY_ERROR";
+  const isUpstreamError =
+    err?.code === "ACCESS_JWKS_UPSTREAM_ERROR" || err?.code === "ACCESS_VERIFY_ERROR";
   if (isConfigError || isUpstreamError || status === 500 || status === 502) {
     const responseStatus = isConfigError ? 500 : 502;
     console.error(
