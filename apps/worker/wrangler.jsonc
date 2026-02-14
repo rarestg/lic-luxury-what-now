@@ -16,9 +16,6 @@
     }
   ],
   "vars": {
-    "ACTIVE_RUN_ID": "active",
-    "CF_ACCESS_TEAM_DOMAIN": "your-team.cloudflareaccess.com",
-    "CF_ACCESS_AUD": "your-access-aud-tag",
-    "ACCESS_DEV_BYPASS": "0"
+    "ACTIVE_RUN_ID": "active"
   }
 }
