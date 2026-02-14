@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+apps/worker/.dev.vars
 tool/config.local.js
 node_modules
 .DS_Store
