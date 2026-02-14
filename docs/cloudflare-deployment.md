@@ -27,9 +27,8 @@ Implemented today:
 
 Not implemented yet:
 
-1. Production Access policy + JWT signature verification hardening
-2. Cloudflare resource provisioning in your account
-3. Final deploy smoke test on real domain
+1. Cloudflare resource provisioning in your account
+2. Final deploy smoke test on real domain
 
 ## Target Architecture
 
@@ -122,6 +121,8 @@ From repo root:
 cd apps/worker
 wrangler d1 execute lic-listings --file migrations/0001_initial_schema.sql
 wrangler d1 execute lic-listings --file migrations/0002_add_component_id.sql
+wrangler d1 execute lic-listings --file migrations/0003_add_bootstrap_metadata.sql
+wrangler d1 execute lic-listings --file migrations/0004_optimize_latest_assertions.sql
 ```
 
 ## 4) Seed baseline graph
@@ -129,6 +130,8 @@ wrangler d1 execute lic-listings --file migrations/0002_add_component_id.sql
 ```bash
 cd /path/to/lic-listings
 node scripts/generate-d1-seed-sql.cjs
+# optional full reset (destructive):
+# node scripts/generate-d1-seed-sql.cjs --destructive-reset
 cd apps/worker
 wrangler d1 execute lic-listings --file seed/seed.sql
 ```
@@ -198,7 +201,7 @@ Implemented helper routes:
 
 1. `GET /api/health`
 2. `GET /api/bootstrap` (listings + graph payload for UI auto-load)
-3. `GET /api/geocode?address=...` (when `GOOGLE_MAPS_API_KEY` Worker secret is set)
+3. `GET /api/geocode?address=...` (requires Access identity and `GOOGLE_MAPS_API_KEY` Worker secret)
 
 ## GET `/api/listings/:id/graph`
 
@@ -269,10 +272,11 @@ To move to live mode:
 Geocoding integration:
 
 1. Expose Worker endpoint `GET /api/geocode?address=...`
-2. Read `GOOGLE_MAPS_API_KEY` from Worker secret, never from browser
-3. Return `{ "address": "<formatted address>" }` (or compatible shape)
-4. Set `.env` locally with `LIC_GEOCODE_ENDPOINT=/api/geocode`
-5. Run `node scripts/generate-tool-config.cjs` so `tool/config.local.js` points UI to Worker endpoint
+2. Require Access identity for geocode requests
+3. Read `GOOGLE_MAPS_API_KEY` from Worker secret, never from browser
+4. Return `{ "address": "<formatted address>" }` (or compatible shape)
+5. Set `.env` locally with `LIC_GEOCODE_ENDPOINT=/api/geocode`
+6. Run `node scripts/generate-tool-config.cjs` so `tool/config.local.js` points UI to Worker endpoint
 
 ## Realtime Multi-User Update Options
 
@@ -290,11 +294,13 @@ For current scale, polling is usually enough. Add Durable Objects when multi-use
 ## Security Requirements
 
 1. Keep Google Maps API key in Worker secret (`wrangler secret put GOOGLE_MAPS_API_KEY`)
-2. Gate the whole app with one Cloudflare Access application (UI + API)
-3. Validate and normalize all input server-side
-4. Add rate limits on mutation endpoints
-5. Use parameterized D1 statements only
-6. For mutation audit, read identity from `Cf-Access-Jwt-Assertion`
+2. Configure Access verification vars in Worker runtime: `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`
+3. Keep `ACCESS_DEV_BYPASS=0` in deployed environments
+4. Gate the whole app with one Cloudflare Access application (UI + API)
+5. Validate and normalize all input server-side
+6. Add rate limits on mutation endpoints
+7. Use parameterized D1 statements only
+8. For mutation audit, read identity from `Cf-Access-Jwt-Assertion`
 
 ## Suggested Worker Project Structure
 
@@ -302,7 +308,9 @@ For current scale, polling is usually enough. Add Durable Objects when multi-use
 apps/worker/
 ├── migrations/
 │   ├── 0001_initial_schema.sql
-│   └── 0002_add_component_id.sql
+│   ├── 0002_add_component_id.sql
+│   ├── 0003_add_bootstrap_metadata.sql
+│   └── 0004_optimize_latest_assertions.sql
 ├── public/                    # built by scripts/prepare-worker-public.cjs
 ├── seed/
 │   └── seed.sql               # built by scripts/generate-d1-seed-sql.cjs
@@ -314,7 +322,7 @@ apps/worker/
 ## Deployment Flow
 
 1. Generate fresh `listing-graph.json` offline
-2. Generate seed SQL (`node scripts/generate-d1-seed-sql.cjs`)
+2. Generate seed SQL (`node scripts/generate-d1-seed-sql.cjs`, safe by default)
 3. Apply migrations and seed D1
 4. Build Worker public bundle (`node scripts/prepare-worker-public.cjs`)
 5. Configure `.env` and regenerate `tool/config.local.js` if needed

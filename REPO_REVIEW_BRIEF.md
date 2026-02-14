@@ -51,7 +51,9 @@ Implemented project scaffold:
 2. `apps/worker/src/index.js`
 3. `apps/worker/migrations/0001_initial_schema.sql`
 4. `apps/worker/migrations/0002_add_component_id.sql`
-5. `apps/worker/README.md`
+5. `apps/worker/migrations/0003_add_bootstrap_metadata.sql`
+6. `apps/worker/migrations/0004_optimize_latest_assertions.sql`
+7. `apps/worker/README.md`
 
 Implemented endpoints:
 
@@ -76,11 +78,12 @@ Decision: unified Worker deployment (API + static assets on same origin).
 3. D1 stores listing graph metadata + assertions + assignments
 4. Cloudflare Access gates the app (UI + API)
 5. Access identity (`Cf-Access-Jwt-Assertion`) used for mutation attribution (`asserted_by`)
+6. Access JWT verified in Worker with Cloudflare Access certs (`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`)
 
 Deferred for now:
 
 1. KV
-2. Durable Objects
+2. Durable Objects (optional; not required after component-level D1 write lock was added)
 3. R2 for primary graph serving (optional for snapshots later)
 
 ## 4) Data Model Notes
@@ -89,12 +92,15 @@ Baseline schema and migration strategy:
 
 1. Initial schema in `apps/worker/migrations/0001_initial_schema.sql`
 2. Added `listings.component_id` in `0002_add_component_id.sql`
-3. Indexed component lookup (`idx_listings_component`)
+3. Added bootstrap metadata columns in `0003_add_bootstrap_metadata.sql`
+4. Added latest-assertion index in `0004_optimize_latest_assertions.sql` (`idx_address_assertions_listing_latest`)
+5. Indexed component lookup (`idx_listings_component`)
 
 Reason:
 
 1. Propagation hot path is component membership lookup
-2. `component_id` avoids runtime graph traversal
+2. Latest direct-assertion lookup must remain fast as history grows
+3. `component_id` avoids runtime graph traversal
 
 ## 5) `POST /api/assertions` Behavior (Current)
 
@@ -111,14 +117,24 @@ Input:
 Flow:
 
 1. Require Access identity header
-2. Normalize incoming address
-3. Insert direct assertion row
-4. Find component members by `listings.component_id`
-5. Compute latest direct assertions in component
-6. If conflict (>1 normalized address): keep direct assignments only
-7. If no conflict: infer unresolved peers in component
-8. Upsert `listing_address_assignments`
-9. Return only changed assignments for UI merge
+2. Verify Access JWT signature + claims (`iss`, `aud`, `exp`, `nbf`)
+3. Acquire component-level write lock (serialize concurrent writes per component)
+4. Normalize incoming address
+5. Insert direct assertion row
+6. Find component members by `listings.component_id`
+7. Compute latest direct assertions in component
+8. If conflict (>1 normalized address): keep direct assignments only
+9. If no conflict: infer unresolved peers in component
+10. Upsert `listing_address_assignments`
+11. Return only changed assignments for UI merge
+
+Concurrency guarantee:
+
+1. Component writes are serialized via a D1-backed lock table (`component_write_locks`) to prevent stale-snapshot overwrite races.
+
+Geocode behavior:
+
+1. `GET /api/geocode` now also requires verified Access identity (not anonymous).
 
 Output includes:
 
@@ -131,6 +147,9 @@ Output includes:
 1. `scripts/generate-d1-seed-sql.cjs`
 2. Reads `data/listings.json` + `data/hash-graph/listing-graph.json`
 3. Writes `apps/worker/seed/seed.sql` with active run + listings + edges + component ids
+4. Safe-by-default mode preserves `address_assertions` + `listing_address_assignments`
+5. Destructive reset requires explicit `--destructive-reset`
+6. Optional cleanup mode: `--prune-unreferenced-listings`
 
 1. `scripts/prepare-worker-public.cjs`
 2. Builds `apps/worker/public/` from local UI + minimal static data bundle
@@ -157,16 +176,18 @@ Note: this directory was not originally a git repo; it has now been initialized 
 2. Create D1 DB and set real `database_id` in `apps/worker/wrangler.jsonc`
 3. Apply migrations
 4. Load seed SQL
-5. Configure Worker secret:
-6. `GOOGLE_MAPS_API_KEY` (if `/api/geocode` is used)
-7. Configure Cloudflare Access app/policies for the deployed hostname
-8. Deploy Worker (`wrangler deploy`)
-9. Smoke test through Access-gated domain
+5. Configure Worker runtime vars:
+6. `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `ACCESS_DEV_BYPASS=0`, `ACTIVE_RUN_ID=active`
+7. Configure Worker secret:
+8. `GOOGLE_MAPS_API_KEY` (if `/api/geocode` is used)
+9. Configure Cloudflare Access app/policies for the deployed hostname
+10. Deploy Worker (`wrangler deploy`)
+11. Smoke test through Access-gated domain
 
 ## 9) Explicit Review Questions for Cloudflare Expert
 
 1. Is unified Worker static+API the right tradeoff for this use case vs Pages+Worker split?
-2. Is current Access integration sufficient for this threat model, or should we verify JWT signatures in Worker now?
+2. Is Access identity verification coverage sufficient across endpoints (`/api/assertions` and `/api/geocode`)?
 3. Any D1 schema/index adjustments needed for propagation correctness or expected growth?
 4. Should we keep seed/import flow as generated SQL, or move to API/scripted upserts?
 5. Any concerns with current conflict semantics (`direct-only on conflict`)?
@@ -179,6 +200,8 @@ Note: this directory was not originally a git repo; it has now been initialized 
 3. `apps/worker/wrangler.jsonc`
 4. `apps/worker/migrations/0001_initial_schema.sql`
 5. `apps/worker/migrations/0002_add_component_id.sql`
-6. `scripts/generate-d1-seed-sql.cjs`
-7. `scripts/prepare-worker-public.cjs`
-8. `docs/cloudflare-deployment.md`
+6. `apps/worker/migrations/0003_add_bootstrap_metadata.sql`
+7. `apps/worker/migrations/0004_optimize_latest_assertions.sql`
+8. `scripts/generate-d1-seed-sql.cjs`
+9. `scripts/prepare-worker-public.cjs`
+10. `docs/cloudflare-deployment.md`
