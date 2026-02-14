@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS listings (
   beds INTEGER,
   baths INTEGER,
   sqft INTEGER,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  metadata_json TEXT                  -- full listing payload used by /api/bootstrap
 );
 
 CREATE TABLE IF NOT EXISTS images (
@@ -71,6 +72,7 @@ CREATE TABLE IF NOT EXISTS listing_edges (
   min_dhash_distance INTEGER NOT NULL,
   avg_phash_distance REAL NOT NULL,
   avg_dhash_distance REAL NOT NULL,
+  sample_image_pairs_json TEXT,       -- JSON array of sample URL pairs for UI evidence
   PRIMARY KEY (run_id, listing_a_id, listing_b_id),
   FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE,
   FOREIGN KEY (listing_a_id) REFERENCES listings(id) ON DELETE CASCADE,

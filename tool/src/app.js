@@ -149,10 +149,12 @@ function exportState() {
     [JSON.stringify({ state: appState.state, exportedAt: new Date().toISOString() }, null, 2)],
     { type: "application/json" },
   );
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
+  a.href = url;
   a.download = "lic-investigator-state.json";
   a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function importState(event) {

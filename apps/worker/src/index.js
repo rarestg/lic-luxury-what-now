@@ -43,6 +43,47 @@ function sqlPlaceholders(count) {
   return new Array(count).fill("?").join(", ");
 }
 
+function parseJsonObject(value, fallback = {}) {
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+  } catch {
+    // no-op
+  }
+  return fallback;
+}
+
+function parseJsonArray(value, fallback = []) {
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed;
+  } catch {
+    // no-op
+  }
+  return fallback;
+}
+
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function maybeNumber(value, fallback = null) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function asStringOrEmpty(value) {
+  return isNonEmptyString(value) ? String(value).trim() : "";
+}
+
+async function tableHasColumn(env, tableName, columnName) {
+  const result = await env.DB.prepare(`PRAGMA table_info(${tableName})`).all();
+  const rows = Array.isArray(result.results) ? result.results : [];
+  return rows.some((row) => String(row.name || "") === columnName);
+}
+
 // --- Chunked IN-clause queries (D1 bind param safety) ---
 
 const BIND_CHUNK_SIZE = 90;
@@ -144,8 +185,16 @@ async function fetchExistingAssignments(env, runId, listingIds) {
   return byListing;
 }
 
-function buildChangedIds(previousAssignments, nextAssignments) {
-  const changed = [];
+function buildRemovedIds(previousAssignments, nextAssignments) {
+  const removed = [];
+  for (const listingId of previousAssignments.keys()) {
+    if (!nextAssignments.has(listingId)) removed.push(listingId);
+  }
+  return removed;
+}
+
+function buildChangedIds(previousAssignments, nextAssignments, removedIds = []) {
+  const changed = new Set();
   for (const [listingId, nextValue] of nextAssignments.entries()) {
     const prev = previousAssignments.get(listingId);
     if (
@@ -155,10 +204,13 @@ function buildChangedIds(previousAssignments, nextAssignments) {
       prev.source !== nextValue.source ||
       Number(prev.confidence) !== Number(nextValue.confidence)
     ) {
-      changed.push(listingId);
+      changed.add(listingId);
     }
   }
-  return changed;
+  for (const listingId of removedIds) {
+    changed.add(listingId);
+  }
+  return [...changed].sort((a, b) => a.localeCompare(b));
 }
 
 // --- Geocode rate limiter (in-memory, per-isolate) ---
@@ -255,6 +307,7 @@ async function handlePostAssertions(request, env) {
       }
     }
   }
+  const removedListingIds = buildRemovedIds(previousAssignments, nextAssignments);
 
   // Atomic batch: assertion insert + all assignment upserts in one DB.batch()
   const statements = [
@@ -269,19 +322,40 @@ async function handlePostAssertions(request, env) {
       ).bind(runId, id, row.address, row.normalizedAddress, row.source, row.confidence),
     );
   }
+  for (const id of removedListingIds) {
+    statements.push(
+      env.DB.prepare(
+        "DELETE FROM listing_address_assignments WHERE run_id = ? AND listing_id = ?",
+      ).bind(runId, id),
+    );
+  }
   await env.DB.batch(statements);
 
-  const changedListingIds = buildChangedIds(previousAssignments, nextAssignments);
+  const changedListingIds = buildChangedIds(
+    previousAssignments,
+    nextAssignments,
+    removedListingIds,
+  );
   const assignments = {};
   for (const listingIdKey of changedListingIds) {
     const row = nextAssignments.get(listingIdKey);
-    assignments[listingIdKey] = {
-      address: row.address,
-      resolved: true,
-      source: row.source,
-      confidence: row.confidence,
-      updatedAt: now,
-    };
+    if (row) {
+      assignments[listingIdKey] = {
+        address: row.address,
+        resolved: true,
+        source: row.source,
+        confidence: row.confidence,
+        updatedAt: now,
+      };
+    } else {
+      assignments[listingIdKey] = {
+        address: "",
+        resolved: false,
+        source: "",
+        confidence: null,
+        updatedAt: now,
+      };
+    }
   }
 
   console.log(
@@ -291,6 +365,7 @@ async function handlePostAssertions(request, env) {
       componentId,
       conflict,
       changedCount: changedListingIds.length,
+      removedCount: removedListingIds.length,
       assertedBy: identity,
     }),
   );
@@ -306,15 +381,20 @@ async function handlePostAssertions(request, env) {
 }
 
 async function handleBootstrap(env) {
+  const [hasListingMetadata, hasEdgeSamplePairs] = await Promise.all([
+    tableHasColumn(env, "listings", "metadata_json"),
+    tableHasColumn(env, "listing_edges", "sample_image_pairs_json"),
+  ]);
+
   const listingsRes = await env.DB.prepare(
-    `SELECT id, title, source_url AS url, price, beds, baths, sqft, component_id
+    `SELECT id, title, source_url AS url, price, beds, baths, sqft, component_id${hasListingMetadata ? ", metadata_json" : ", NULL AS metadata_json"}
      FROM listings
      ORDER BY price DESC`,
   ).all();
   const edgeRes = await env.DB.prepare(
     `SELECT listing_a_id AS source, listing_b_id AS target, matched_image_pairs AS matchedImagePairs,
             min_phash_distance AS minPhashDistance, avg_phash_distance AS avgPhashDistance,
-            min_dhash_distance AS minDhashDistance, avg_dhash_distance AS avgDhashDistance
+            min_dhash_distance AS minDhashDistance, avg_dhash_distance AS avgDhashDistance${hasEdgeSamplePairs ? ", sample_image_pairs_json" : ", NULL AS sample_image_pairs_json"}
      FROM listing_edges
      WHERE run_id = ?
      ORDER BY matched_image_pairs DESC`,
@@ -322,20 +402,48 @@ async function handleBootstrap(env) {
     .bind(String(env.ACTIVE_RUN_ID || "active"))
     .all();
 
-  const listings = Array.isArray(listingsRes.results) ? listingsRes.results : [];
+  const listingRows = Array.isArray(listingsRes.results) ? listingsRes.results : [];
+  const listings = listingRows.map((row) => {
+    const metadata = parseJsonObject(row.metadata_json, {});
+    const listingId = String(row.id || "");
+
+    const features = Array.isArray(metadata.features) ? metadata.features : [];
+    const watchFlags = Array.isArray(metadata.watchFlags) ? metadata.watchFlags : [];
+    const imageUrls = Array.isArray(metadata.imageUrls) ? metadata.imageUrls : [];
+
+    return {
+      id: listingId,
+      webId: asStringOrEmpty(metadata.webId) || listingId,
+      title: asStringOrEmpty(row.title) || asStringOrEmpty(metadata.title),
+      url: asStringOrEmpty(row.url) || asStringOrEmpty(metadata.url),
+      price: maybeNumber(row.price, maybeNumber(metadata.price)),
+      beds: maybeNumber(row.beds, maybeNumber(metadata.beds)),
+      baths: maybeNumber(row.baths, maybeNumber(metadata.baths)),
+      sqft: maybeNumber(row.sqft, maybeNumber(metadata.sqft)),
+      type: asStringOrEmpty(metadata.type),
+      neighborhood: asStringOrEmpty(metadata.neighborhood),
+      noFee: Boolean(metadata.noFee),
+      features,
+      description: isNonEmptyString(metadata.description) ? metadata.description : null,
+      parking: isNonEmptyString(metadata.parking) ? metadata.parking : null,
+      petPolicy: isNonEmptyString(metadata.petPolicy) ? metadata.petPolicy : null,
+      watchFlags,
+      imageUrls,
+    };
+  });
   const edges = Array.isArray(edgeRes.results)
     ? edgeRes.results.map((row) => ({
         ...row,
-        sampleImagePairs: [],
+        sampleImagePairs: parseJsonArray(row.sample_image_pairs_json, []),
       }))
     : [];
 
   const componentMap = new Map();
-  for (const listing of listings) {
-    const cid = listing.component_id == null ? null : Number(listing.component_id);
+  for (const row of listingRows) {
+    const cid = row.component_id == null ? null : Number(row.component_id);
     if (cid == null) continue;
     if (!componentMap.has(cid)) componentMap.set(cid, []);
-    componentMap.get(cid).push(String(listing.id));
+    componentMap.get(cid).push(String(row.id));
   }
   const components = [...componentMap.entries()].map(([componentId, listingIds]) => ({
     componentId: String(componentId),
@@ -360,7 +468,7 @@ async function handleBootstrap(env) {
           nodes: listings.length,
           edges: edges.length,
           components: components.length,
-          isolatedListings: listings.filter((row) => row.component_id == null).length,
+          isolatedListings: listingRows.filter((row) => row.component_id == null).length,
         },
       },
     },

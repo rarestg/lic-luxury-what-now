@@ -9,7 +9,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "check": "npm run lint && npm run typecheck",
     "check:fix": "biome check --write . && npm run typecheck",
-    "prepare": "node -e \"const fs=require('fs'); if(fs.existsSync('.git')){require('child_process').execSync('lefthook install',{stdio:'inherit'});} else {console.log('Skipping lefthook install (no .git directory).');}\""
+    "prepare": "node -e \"const fs=require('node:fs'); if(fs.existsSync('.git')){require('node:child_process').execSync('lefthook install',{stdio:'inherit'});} else {console.log('Skipping lefthook install (no .git directory).');}\""
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

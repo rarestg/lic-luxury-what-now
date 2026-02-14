@@ -2,8 +2,12 @@
 // Parse scraped listing markdown files into structured JSON
 // Idempotent: can re-run safely, overwrites output
 
-const fs = require("node:fs");
-const path = require("node:path");
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const LISTINGS_DIR = path.join(ROOT_DIR, ".firecrawl", "listings");

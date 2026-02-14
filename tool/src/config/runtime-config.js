@@ -30,6 +30,7 @@ export function isApiAssertionsEnabled() {
 
 export function buildApiUrl(path) {
   const base = getApiBaseUrl();
-  const cleanPath = String(path || "").startsWith("/") ? String(path) : `/${String(path || "")}`;
+  const p = String(path || "");
+  const cleanPath = p.startsWith("/") ? p : `/${p}`;
   return `${base}${cleanPath}`;
 }
