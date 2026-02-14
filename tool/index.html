@@ -1,0 +1,2754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LIC Listings Investigator</title>
+<style>
+  :root {
+    --bg: #0a0f14;
+    --bg-soft: #111821;
+    --card: #15202b;
+    --card-strong: #1b2835;
+    --border: #2d3f52;
+    --border-soft: #223141;
+    --text: #d6e1eb;
+    --dim: #8fa2b7;
+    --accent: #5db3ff;
+    --green: #3ecf8e;
+    --yellow: #f0be49;
+    --red: #ff6b6b;
+    --pending-bg: rgba(240, 190, 73, 0.12);
+    --resolved-bg: rgba(62, 207, 142, 0.14);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --space-1: 6px;
+    --space-2: 10px;
+    --space-3: 14px;
+    --space-4: 18px;
+    --space-5: 24px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    background:
+      radial-gradient(circle at 10% 0%, rgba(93, 179, 255, 0.08), transparent 35%),
+      radial-gradient(circle at 90% 0%, rgba(62, 207, 142, 0.08), transparent 28%),
+      var(--bg);
+    color: var(--text);
+    line-height: 1.35;
+    display: grid;
+    grid-template-rows: auto 6px minmax(0, 1fr);
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg-soft); }
+  ::-webkit-scrollbar-thumb { background: #35516b; border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: #456a8a; }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 120;
+    backdrop-filter: blur(8px);
+    background: rgba(10, 15, 20, 0.92);
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-3) var(--space-5) var(--space-2);
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .topbar-main {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-4);
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .brand h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.2px; }
+  .brand p { font-size: 12px; color: var(--dim); margin-top: 4px; }
+
+  .stats {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .stat {
+    font-size: 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    padding: 6px 11px;
+    white-space: nowrap;
+  }
+
+  .stat.resolved { color: var(--green); border-color: rgba(62, 207, 142, 0.45); }
+  .stat.pending { color: var(--yellow); border-color: rgba(240, 190, 73, 0.45); }
+  .stat.shared { color: var(--accent); border-color: rgba(93, 179, 255, 0.45); }
+  .stat.clusters { color: #7ed9ff; border-color: rgba(126, 217, 255, 0.45); }
+
+  .topbar-controls {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    background: rgba(21, 32, 43, 0.65);
+    overflow: hidden;
+  }
+
+  .topbar-controls summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--dim);
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid transparent;
+  }
+
+  .topbar-controls[open] summary {
+    border-bottom-color: var(--border-soft);
+  }
+
+  .topbar-controls summary::-webkit-details-marker { display: none; }
+
+  .controls-grid {
+    padding: 10px;
+    display: grid;
+    grid-template-columns: 130px 130px minmax(260px, 1fr) 210px auto;
+    gap: 10px;
+    align-items: end;
+  }
+
+  .control-group {
+    display: grid;
+    gap: 6px;
+  }
+
+  .control-group label {
+    font-size: 11px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+
+  .control-group input,
+  .control-group select,
+  .control-group button {
+    width: 100%;
+    min-height: 36px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-soft);
+    color: var(--text);
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  .control-group input:focus,
+  .control-group select:focus,
+  .control-group button:focus,
+  .view-toggle button:focus,
+  .action-btn:focus,
+  .image-action:focus,
+  .cluster-jump:focus,
+  .cluster-header button:focus,
+  .address-btn:focus {
+    outline: 2px solid rgba(93, 179, 255, 0.45);
+    outline-offset: 2px;
+  }
+
+  .view-toggle {
+    display: inline-flex;
+    gap: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-soft);
+    padding: 4px;
+  }
+
+  .view-toggle button {
+    border: none;
+    min-height: 28px;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--dim);
+    padding: 4px 10px;
+    cursor: pointer;
+    width: auto;
+    font-size: 12px;
+  }
+
+  .view-toggle button.active {
+    background: var(--card-strong);
+    color: var(--text);
+    border: 1px solid rgba(93, 179, 255, 0.4);
+  }
+
+  .control-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .action-btn {
+    border: 1px solid var(--border);
+    background: var(--bg-soft);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    min-height: 30px;
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+
+  .actions-group {
+    min-width: 0;
+  }
+
+  .action-btn:hover { border-color: rgba(93, 179, 255, 0.5); }
+
+  .progress-wrap {
+    height: 6px;
+    background: var(--border-soft);
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #37be8a, #73e6a9);
+    width: 0;
+    transition: width 0.25s ease;
+  }
+
+  .container {
+    height: 100%;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 370px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    border-right: 1px solid var(--border);
+    overflow: auto;
+    background: linear-gradient(180deg, rgba(21, 32, 43, 0.95), rgba(17, 24, 33, 0.92));
+    padding: 10px;
+    min-height: 0;
+  }
+
+  .sidebar-empty,
+  .main-empty {
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    color: var(--dim);
+    background: rgba(21, 32, 43, 0.45);
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .sidebar-stack { display: grid; gap: 8px; }
+
+  .cluster-overview {
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-soft);
+    background: rgba(17, 24, 33, 0.75);
+    display: grid;
+    gap: 8px;
+  }
+
+  .cluster-overview h3 {
+    font-size: 11px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+
+  .cluster-jumps { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .cluster-jump {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-soft);
+    color: var(--text);
+    font-size: 11px;
+    padding: 5px 9px;
+    cursor: pointer;
+  }
+
+  .cluster-jump.active {
+    border-color: rgba(93, 179, 255, 0.6);
+    box-shadow: inset 0 0 0 1px rgba(93, 179, 255, 0.25);
+  }
+
+  .cluster-focus {
+    border: 1px solid rgba(93, 179, 255, 0.45);
+    background: rgba(93, 179, 255, 0.08);
+    border-radius: var(--radius-md);
+    padding: 9px 10px;
+    font-size: 12px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .cluster-focus button {
+    border: 1px solid var(--border);
+    background: var(--bg-soft);
+    color: var(--text);
+    border-radius: 999px;
+    font-size: 11px;
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+
+  .cluster-group {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    background: rgba(17, 24, 33, 0.62);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+
+  .cluster-header {
+    border-bottom: 1px solid var(--border-soft);
+    background: rgba(21, 32, 43, 0.95);
+  }
+
+  .cluster-header button {
+    width: 100%;
+    border: none;
+    cursor: pointer;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    padding: 10px;
+    display: grid;
+    gap: 6px;
+  }
+
+  .cluster-header-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .cluster-header-sub {
+    font-size: 11px;
+    color: var(--dim);
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .cluster-color-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    flex: none;
+  }
+
+  .cluster-resolved-tag {
+    font-size: 11px;
+    border: 1px solid rgba(62, 207, 142, 0.5);
+    color: var(--green);
+    background: rgba(62, 207, 142, 0.12);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+
+  .cluster-unresolved-tag {
+    font-size: 11px;
+    border: 1px solid rgba(240, 190, 73, 0.45);
+    color: var(--yellow);
+    background: rgba(240, 190, 73, 0.12);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+
+  .cluster-members {
+    padding: 8px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .listing-card {
+    border: 1px solid var(--border-soft);
+    border-radius: 11px;
+    background: rgba(21, 32, 43, 0.75);
+    padding: 10px;
+    cursor: pointer;
+    transition: border-color 0.16s, transform 0.16s, background 0.16s;
+    border-left: 4px solid var(--cluster-color, var(--border));
+  }
+
+  .listing-card:hover {
+    border-color: rgba(93, 179, 255, 0.45);
+    transform: translateY(-1px);
+    background: rgba(21, 32, 43, 0.95);
+  }
+
+  .listing-card.active {
+    border-color: rgba(93, 179, 255, 0.72);
+    box-shadow: inset 0 0 0 1px rgba(93, 179, 255, 0.28);
+  }
+
+  .card-head,
+  .card-price-row,
+  .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+  .card-head { margin-bottom: 8px; }
+
+  .status-pill {
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 2px 8px;
+    border: 1px solid;
+  }
+
+  .status-pill.resolved {
+    color: var(--green);
+    border-color: rgba(62, 207, 142, 0.55);
+    background: var(--resolved-bg);
+  }
+
+  .status-pill.pending {
+    color: var(--yellow);
+    border-color: rgba(240, 190, 73, 0.5);
+    background: var(--pending-bg);
+  }
+
+  .cluster-pill {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--dim);
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(10, 15, 20, 0.6);
+    padding: 2px 8px;
+  }
+
+  .card-price-row .price {
+    color: var(--green);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+  }
+
+  .card-layout {
+    color: var(--dim);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .listing-card .title {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.35;
+    margin-bottom: 6px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .card-meta {
+    font-size: 11px;
+    color: var(--dim);
+    margin-bottom: 6px;
+  }
+
+  .card-address {
+    font-size: 12px;
+    min-height: 17px;
+    margin-bottom: 8px;
+    color: var(--dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .card-address.resolved { color: #8de9b7; }
+  .card-address.pending { color: #efd183; }
+
+  .card-tags {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+
+  .chip {
+    font-size: 10px;
+    border-radius: 999px;
+    padding: 3px 7px;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    background: rgba(10, 15, 20, 0.65);
+  }
+
+  .chip.warn { color: var(--yellow); border-color: rgba(240, 190, 73, 0.45); }
+  .chip.shared { color: var(--accent); border-color: rgba(93, 179, 255, 0.45); }
+  .chip.note { color: #b5d4ff; border-color: rgba(126, 186, 255, 0.45); }
+
+  .main {
+    overflow: auto;
+    padding: 18px;
+    min-height: 0;
+  }
+
+  .detail-shell {
+    max-width: 1220px;
+    margin: 0 auto;
+    display: grid;
+    gap: 14px;
+  }
+
+  .hero {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(130deg, rgba(21, 32, 43, 0.96), rgba(17, 24, 33, 0.96)),
+      radial-gradient(circle at 0% 0%, rgba(93, 179, 255, 0.15), transparent 30%);
+    padding: 16px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: start;
+  }
+
+  .hero-title {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .hero-title h2 { font-size: 24px; line-height: 1.25; }
+
+  .hero-id {
+    color: var(--dim);
+    font-size: 13px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+
+  .hero-price {
+    font-size: 34px;
+    color: var(--green);
+    font-weight: 700;
+    margin-bottom: 10px;
+    letter-spacing: 0.3px;
+  }
+
+  .hero-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-bottom: 8px;
+  }
+
+  .metric-chip {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--text);
+    background: rgba(10, 15, 20, 0.55);
+    padding: 5px 10px;
+  }
+
+  .watch-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .hero-side {
+    display: grid;
+    gap: 8px;
+    justify-items: end;
+    text-align: right;
+    min-width: 220px;
+  }
+
+  .hero-link {
+    text-decoration: none;
+    color: var(--accent);
+    border: 1px solid rgba(93, 179, 255, 0.5);
+    background: rgba(93, 179, 255, 0.12);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .hero-link:hover { background: rgba(93, 179, 255, 0.2); }
+
+  .hero-cluster {
+    border: 1px solid var(--border);
+    background: rgba(10, 15, 20, 0.5);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--dim);
+    display: grid;
+    gap: 4px;
+  }
+
+  .hero-cluster strong { color: var(--text); }
+
+  .section,
+  .address-section,
+  .image-section,
+  .edge-section {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: linear-gradient(180deg, rgba(21, 32, 43, 0.9), rgba(17, 24, 33, 0.86));
+    padding: 14px;
+  }
+
+  .section-header {
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+
+  .section-header h3 {
+    font-size: 15px;
+    letter-spacing: 0.2px;
+  }
+
+  .section-sub {
+    font-size: 12px;
+    color: var(--dim);
+    margin-top: -4px;
+    margin-bottom: 10px;
+  }
+
+  .address-status {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    border-radius: 999px;
+    padding: 4px 9px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    border: 1px solid;
+  }
+
+  .address-status.pending {
+    color: var(--yellow);
+    border-color: rgba(240, 190, 73, 0.5);
+    background: var(--pending-bg);
+  }
+
+  .address-status.resolved {
+    color: var(--green);
+    border-color: rgba(62, 207, 142, 0.55);
+    background: var(--resolved-bg);
+  }
+
+  .address-help {
+    color: var(--dim);
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+
+  .address-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 9px;
+    margin-bottom: 10px;
+  }
+
+  .address-row input,
+  .notes-input {
+    width: 100%;
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    padding: 11px;
+  }
+
+  .address-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .address-btn {
+    border: 1px solid var(--border);
+    background: var(--bg-soft);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    min-width: 104px;
+  }
+
+  .address-btn.geocode:hover { border-color: rgba(93, 179, 255, 0.55); }
+
+  .address-btn.save {
+    background: rgba(62, 207, 142, 0.18);
+    border-color: rgba(62, 207, 142, 0.55);
+    color: #91f1c4;
+  }
+
+  .address-btn.save:hover { background: rgba(62, 207, 142, 0.26); }
+
+  .address-btn.edit {
+    background: rgba(93, 179, 255, 0.15);
+    border-color: rgba(93, 179, 255, 0.5);
+    color: #b4deff;
+  }
+
+  .address-resolved-box {
+    border: 1px solid rgba(62, 207, 142, 0.5);
+    border-radius: var(--radius-sm);
+    background: rgba(62, 207, 142, 0.12);
+    padding: 11px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .address-resolved-box strong {
+    color: #91f1c4;
+    font-size: 16px;
+    font-weight: 650;
+  }
+
+  .address-cluster-hint {
+    font-size: 12px;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  .notes-input {
+    resize: vertical;
+    min-height: 58px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+
+  .image-section .section-header { margin-bottom: 12px; }
+
+  .image-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+  }
+
+  .image-card {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: rgba(10, 15, 20, 0.65);
+  }
+
+  .image-frame {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    background: #0d141c;
+  }
+
+  .image-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    cursor: zoom-in;
+  }
+
+  .image-overlay {
+    position: absolute;
+    inset: auto 0 0 0;
+    background: linear-gradient(to top, rgba(7, 11, 16, 0.95), rgba(7, 11, 16, 0.35));
+    padding: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 0.16s;
+  }
+
+  .image-card:hover .image-overlay,
+  .image-card:focus-within .image-overlay { opacity: 1; }
+
+  .image-action {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: rgba(17, 24, 33, 0.95);
+    color: var(--text);
+    text-decoration: none;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 9px 8px;
+    cursor: pointer;
+  }
+
+  .image-action.primary {
+    background: rgba(93, 179, 255, 0.2);
+    border-color: rgba(93, 179, 255, 0.56);
+    color: #c9e8ff;
+  }
+
+  .image-action:hover { border-color: rgba(93, 179, 255, 0.58); }
+
+  .edge-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+  }
+
+  .edge-card {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    background: rgba(10, 15, 20, 0.6);
+    display: grid;
+    gap: 10px;
+  }
+
+  .edge-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .edge-link {
+    border: 1px solid var(--border);
+    background: rgba(21, 32, 43, 0.9);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    padding: 6px 9px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .edge-link:hover { border-color: rgba(93, 179, 255, 0.55); }
+
+  .edge-meta {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .edge-meta span {
+    font-size: 11px;
+    color: var(--dim);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 8px;
+    background: rgba(21, 32, 43, 0.55);
+  }
+
+  .pair-grid {
+    display: grid;
+    gap: 8px;
+  }
+
+  .pair-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .pair-image {
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    overflow: hidden;
+    background: #0d141c;
+    display: block;
+    aspect-ratio: 16 / 10;
+  }
+
+  .pair-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .pair-row-labels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--dim);
+    margin-top: 2px;
+  }
+
+  .edge-empty { font-size: 12px; color: var(--dim); }
+
+  .connected-members {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 10px;
+  }
+
+  .member-chip {
+    border: 1px solid var(--border);
+    background: rgba(17, 24, 33, 0.8);
+    color: var(--text);
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .member-chip:hover { border-color: rgba(93, 179, 255, 0.55); }
+
+  .member-chip.resolved {
+    border-color: rgba(62, 207, 142, 0.45);
+    color: #95efc1;
+  }
+
+  .member-chip.active {
+    border-color: rgba(93, 179, 255, 0.62);
+    box-shadow: inset 0 0 0 1px rgba(93, 179, 255, 0.24);
+  }
+
+  .component-meta {
+    display: grid;
+    gap: 10px;
+  }
+
+  .component-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .component-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .component-action-btn {
+    border: 1px solid var(--border);
+    background: rgba(17, 24, 33, 0.8);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .component-action-btn:hover { border-color: rgba(93, 179, 255, 0.55); }
+
+  .component-action-btn.warn {
+    border-color: rgba(240, 190, 73, 0.55);
+    color: var(--yellow);
+    background: rgba(240, 190, 73, 0.12);
+  }
+
+  .component-warning {
+    border: 1px solid rgba(240, 190, 73, 0.55);
+    background: rgba(240, 190, 73, 0.12);
+    color: #f8d990;
+    border-radius: var(--radius-sm);
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+
+  .connected-evidence {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .connected-evidence .edge-card {
+    padding: 9px;
+    gap: 8px;
+  }
+
+  .edge-strength {
+    font-size: 11px;
+    border-radius: 999px;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    background: rgba(21, 32, 43, 0.55);
+    color: var(--dim);
+  }
+
+  .edge-strength.strong {
+    border-color: rgba(62, 207, 142, 0.55);
+    color: #9cf1c8;
+    background: rgba(62, 207, 142, 0.12);
+  }
+
+  .edge-strength.medium {
+    border-color: rgba(93, 179, 255, 0.55);
+    color: #badfff;
+    background: rgba(93, 179, 255, 0.12);
+  }
+
+  .edge-strength.weak {
+    border-color: rgba(240, 190, 73, 0.5);
+    color: #f1d899;
+    background: rgba(240, 190, 73, 0.12);
+  }
+
+  .sample-link-grid {
+    display: grid;
+    gap: 6px;
+  }
+
+  .sample-link-row {
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: rgba(10, 15, 20, 0.5);
+    padding: 7px 8px;
+    display: grid;
+    gap: 5px;
+  }
+
+  .sample-link-row a {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .sample-link-row a:hover { text-decoration: underline; }
+
+  details.collapsible {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: rgba(21, 32, 43, 0.86);
+    overflow: hidden;
+  }
+
+  details.collapsible + details.collapsible { margin-top: 10px; }
+
+  details.collapsible summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    border-bottom: 1px solid transparent;
+  }
+
+  details.collapsible[open] summary { border-bottom-color: var(--border-soft); }
+
+  details.collapsible summary::-webkit-details-marker { display: none; }
+
+  .collapsible-content {
+    padding: 12px 14px 14px;
+    color: var(--text);
+    font-size: 14px;
+  }
+
+  .features-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .feature {
+    font-size: 12px;
+    background: rgba(10, 15, 20, 0.62);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 10px;
+  }
+
+  .description { line-height: 1.6; white-space: pre-wrap; }
+
+  .empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+  }
+
+  .load-section {
+    max-width: 560px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+    background: rgba(17, 24, 33, 0.7);
+    padding: 20px;
+    text-align: center;
+    display: grid;
+    gap: 12px;
+  }
+
+  .load-section input[type="file"] { display: none; }
+
+  .load-btn {
+    border: 1px solid rgba(93, 179, 255, 0.5);
+    background: rgba(93, 179, 255, 0.14);
+    color: #c8e7ff;
+    border-radius: var(--radius-md);
+    padding: 11px 14px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-block;
+    min-width: 220px;
+  }
+
+  .load-btn:hover { background: rgba(93, 179, 255, 0.24); }
+
+  @media (max-width: 1180px) {
+    .controls-grid { grid-template-columns: repeat(2, minmax(170px, 1fr)); }
+    .container { grid-template-columns: 320px minmax(0, 1fr); }
+  }
+
+  @media (max-width: 980px) {
+    .topbar { padding: 10px 12px; }
+    .topbar-controls summary { display: flex; }
+    .topbar-controls .controls-grid { display: none; }
+    .topbar-controls[open] .controls-grid { display: grid; grid-template-columns: 1fr; }
+    .container {
+      height: 100%;
+      min-height: 0;
+      grid-template-columns: 1fr;
+    }
+    .sidebar {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      max-height: 44vh;
+    }
+    .main { min-height: 56vh; }
+    .hero { grid-template-columns: 1fr; }
+    .hero-side { justify-items: start; text-align: left; min-width: 0; }
+    .address-row { grid-template-columns: 1fr; }
+    .address-buttons { width: 100%; }
+    .address-buttons .address-btn { flex: 1; }
+    .image-overlay {
+      opacity: 1;
+      grid-template-columns: 1fr;
+      background: linear-gradient(to top, rgba(7, 11, 16, 0.92), rgba(7, 11, 16, 0.45));
+    }
+    .image-gallery { grid-template-columns: 1fr; }
+    .edge-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-main">
+    <div class="brand">
+      <h1>LIC Listings Investigator</h1>
+      <p>Resolve addresses with image-cluster evidence</p>
+    </div>
+    <div class="stats">
+      <span class="stat resolved" id="stat-resolved">0 resolved</span>
+      <span class="stat pending" id="stat-pending">0 pending</span>
+      <span class="stat shared" id="stat-shared">0 connected listings</span>
+      <span class="stat clusters" id="stat-clusters">0/0 clusters resolved</span>
+      <span class="stat" id="stat-total">0 listings</span>
+    </div>
+  </div>
+
+  <details class="topbar-controls" open>
+    <summary>Filters &amp; Actions</summary>
+    <div class="controls-grid">
+      <div class="control-group">
+        <label for="filter-status">Status</label>
+        <select id="filter-status">
+          <option value="all">All</option>
+          <option value="pending">Pending</option>
+          <option value="resolved">Resolved</option>
+          <option value="shared-images">Connected Listings</option>
+          <option value="current-component">Current Component</option>
+          <option value="unresolved-current-component">Unresolved In Current Component</option>
+          <option value="resolved-current-component">Resolved In Current Component</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="filter-beds">Bedrooms</label>
+        <select id="filter-beds">
+          <option value="all">All Beds</option>
+          <option value="3">3 BR</option>
+          <option value="4">4+ BR</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="filter-search">Search</label>
+        <input type="text" id="filter-search" placeholder="Title, address, notes, description...">
+      </div>
+
+      <div class="control-group">
+        <label>Sidebar View</label>
+        <div class="view-toggle">
+          <button type="button" id="view-flat" onclick="setSidebarMode('flat')">Flat</button>
+          <button type="button" id="view-clustered" onclick="setSidebarMode('clustered')">By Cluster</button>
+        </div>
+      </div>
+
+      <div class="control-group actions-group">
+        <label>Data Actions</label>
+        <div class="control-actions">
+          <button class="action-btn" type="button" onclick="exportState()">Export</button>
+          <button class="action-btn" type="button" onclick="document.getElementById('import-file').click()">Import</button>
+          <button class="action-btn" type="button" onclick="loadFromDisk()">Reload Data</button>
+        </div>
+        <input type="file" id="import-file" accept=".json" onchange="importState(event)" style="display:none;">
+      </div>
+    </div>
+  </details>
+</div>
+
+<div class="progress-wrap"><div class="progress-fill" id="progress-fill"></div></div>
+
+<div class="container">
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="main" id="main">
+    <div class="empty" id="empty-state">
+      <div class="load-section">
+        <p>Load <code>listings.json</code> and <code>hash-graph/listing-graph.json</code> to begin.</p>
+        <div>
+          <label class="load-btn">
+            Load listings.json
+            <input type="file" accept=".json" onchange="loadListingsFile(event)">
+          </label>
+          <label class="load-btn" style="margin-left: 8px;">
+            Load listing-graph.json
+            <input type="file" accept=".json" onchange="loadListingGraphFile(event)">
+          </label>
+        </div>
+        <p style="font-size:12px; color: var(--dim);">If this folder is served locally, data will auto-load from <code>data/</code>.</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="config.js"></script>
+<script src="config.local.js"></script>
+<script>
+// State
+let listings = [];
+let listingById = Object.create(null);
+let listingGraph = null;
+let graphAdjacency = Object.create(null); // listingId -> Set(listingIds)
+let graphComponents = []; // normalized components
+let componentByListing = Object.create(null); // listingId -> component
+let componentColorById = Object.create(null); // componentId -> hsl color
+let edgeLookup = Object.create(null); // sorted source-target key -> edge
+let state = Object.create(null); // listingId -> { address, notes, resolved }
+let selectedId = null;
+let sidebarMode = 'flat';
+let focusedClusterKey = '';
+let lastBulkApply = null;
+
+const STORAGE_KEY = 'lic-investigator-state';
+function getAppConfig() {
+  const cfg = (window.LIC_CONFIG && typeof window.LIC_CONFIG === 'object')
+    ? window.LIC_CONFIG
+    : {};
+
+  return {
+    geocodeEndpoint: String(cfg.geocodeEndpoint || '').trim(),
+    googleMapsApiKey: String(cfg.googleMapsApiKey || '').trim(),
+    apiBaseUrl: String(cfg.apiBaseUrl || '').trim(),
+    useApiAssertions: Boolean(cfg.useApiAssertions)
+  };
+}
+
+function isGeocodeConfigured() {
+  const cfg = getAppConfig();
+  return Boolean(cfg.geocodeEndpoint || cfg.googleMapsApiKey);
+}
+
+function getApiBaseUrl() {
+  const cfg = getAppConfig();
+  if (!cfg.apiBaseUrl) return '';
+  return cfg.apiBaseUrl.replace(/\/+$/, '');
+}
+
+function isApiAssertionsEnabled() {
+  const cfg = getAppConfig();
+  return Boolean(cfg.useApiAssertions);
+}
+
+function buildApiUrl(path) {
+  const base = getApiBaseUrl();
+  const cleanPath = String(path || '').startsWith('/') ? String(path) : `/${String(path || '')}`;
+  return `${base}${cleanPath}`;
+}
+
+async function geocodeWithEndpoint(raw, endpoint) {
+  const url = new URL(endpoint, window.location.href);
+  url.searchParams.set('address', raw);
+
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json'
+    }
+  });
+  if (!res.ok) throw new Error(`Geocode endpoint returned HTTP ${res.status}`);
+
+  const payload = await res.json();
+  if (!payload) return null;
+  if (typeof payload === 'string') return payload.trim() || null;
+  if (typeof payload.address === 'string' && payload.address.trim()) return payload.address.trim();
+  if (typeof payload.formattedAddress === 'string' && payload.formattedAddress.trim()) return payload.formattedAddress.trim();
+  if (typeof payload.formatted_address === 'string' && payload.formatted_address.trim()) return payload.formatted_address.trim();
+  if (payload.status === 'OK' && Array.isArray(payload.results) && payload.results.length > 0) {
+    const first = payload.results[0];
+    if (first && typeof first.formatted_address === 'string' && first.formatted_address.trim()) {
+      return first.formatted_address.trim();
+    }
+  }
+  return null;
+}
+
+async function geocodeWithGoogle(raw, apiKey) {
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(raw)}&key=${encodeURIComponent(apiKey)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Google geocoding returned HTTP ${res.status}`);
+  const payload = await res.json();
+  if (payload.status === 'OK' && Array.isArray(payload.results) && payload.results.length > 0) {
+    return payload.results[0].formatted_address;
+  }
+  return null;
+}
+
+async function geocodeAddress(raw) {
+  const cfg = getAppConfig();
+  if (cfg.geocodeEndpoint) return geocodeWithEndpoint(raw, cfg.geocodeEndpoint);
+  if (cfg.googleMapsApiKey) return geocodeWithGoogle(raw, cfg.googleMapsApiKey);
+  throw new Error('Geocoding is not configured. Set LIC_GEOCODE_ENDPOINT or LIC_GOOGLE_MAPS_API_KEY in .env, then run: node scripts/generate-tool-config.js');
+}
+
+async function geocodeAndFill() {
+  const input = document.getElementById('address-input');
+  const btn = document.getElementById('geocode-btn');
+  if (!input || !input.value.trim() || !btn) return;
+  if (!isGeocodeConfigured()) {
+    alert('Geocoding is disabled. Configure .env, then run: node scripts/generate-tool-config.js');
+    return;
+  }
+  btn.textContent = 'Normalizing...';
+  btn.disabled = true;
+  try {
+    const cleaned = await geocodeAddress(input.value.trim());
+    if (cleaned) {
+      input.value = cleaned;
+    } else {
+      alert('Could not geocode that address. Try being more specific.');
+    }
+  } catch (e) {
+    alert('Geocoding failed: ' + e.message);
+  }
+  btn.textContent = 'Normalize';
+  btn.disabled = false;
+}
+
+function hideEmptyState() {
+  const emptyState = document.getElementById('empty-state');
+  if (emptyState) emptyState.style.display = 'none';
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function safeUrl(value) {
+  if (!value) return '';
+  try {
+    const parsed = new URL(String(value), window.location.origin);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;
+  } catch (e) {}
+  return '';
+}
+
+function encodeInlineArg(value) {
+  return encodeURIComponent(String(value ?? ''));
+}
+
+function decodeInlineArg(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch (e) {
+    return '';
+  }
+}
+
+function normalizeListingState(value) {
+  const raw = (value && typeof value === 'object') ? value : {};
+  const address = typeof raw.address === 'string' ? raw.address : '';
+  const notes = typeof raw.notes === 'string' ? raw.notes : '';
+  const source = typeof raw.source === 'string' ? raw.source : '';
+  const updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : '';
+  const confidenceNum = Number(raw.confidence);
+  const confidence = Number.isFinite(confidenceNum) ? confidenceNum : null;
+  const resolved = Boolean(raw.resolved && address.trim());
+  return { address, notes, resolved, source, updatedAt, confidence };
+}
+
+function formatPrice(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num.toLocaleString() : '0';
+}
+
+function formatMetric(value, fallback = '?') {
+  if (value === 0 || value) return escapeHtml(String(value));
+  return fallback;
+}
+
+function formatSqft(value, withUnit) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return withUnit ? '' : 'N/A';
+  return withUnit ? `${num.toLocaleString()} ft²` : num.toLocaleString();
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function rebuildListingIndex() {
+  listingById = Object.create(null);
+  for (const listing of listings) {
+    const id = String(listing && listing.id != null ? listing.id : '');
+    if (id) listingById[id] = listing;
+  }
+}
+
+function getListingById(id) {
+  return listingById[String(id)] || null;
+}
+
+function getEdgeKey(a, b) {
+  const aa = String(a ?? '');
+  const bb = String(b ?? '');
+  if (!aa || !bb) return '';
+  return aa < bb ? `${aa}__${bb}` : `${bb}__${aa}`;
+}
+
+function hashToHue(value) {
+  const text = String(value ?? '');
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = ((hash << 5) - hash) + text.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) % 360;
+}
+
+function getClusterColorByComponentId(componentId) {
+  const key = String(componentId ?? '');
+  if (!key) return 'hsl(208 30% 45%)';
+  if (!componentColorById[key]) {
+    componentColorById[key] = `hsl(${hashToHue(key)} 68% 54%)`;
+  }
+  return componentColorById[key];
+}
+
+function buildGraphAdjacency(graph) {
+  const adjacency = Object.create(null);
+  if (!graph || typeof graph !== 'object' || !Array.isArray(graph.edges)) return adjacency;
+  for (const edge of graph.edges) {
+    if (!edge || typeof edge !== 'object') continue;
+    const a = String(edge.source ?? '');
+    const b = String(edge.target ?? '');
+    if (!a || !b || a === b) continue;
+    if (!adjacency[a]) adjacency[a] = new Set();
+    if (!adjacency[b]) adjacency[b] = new Set();
+    adjacency[a].add(b);
+    adjacency[b].add(a);
+  }
+  return adjacency;
+}
+
+function buildEdgeLookup(graph) {
+  const lookup = Object.create(null);
+  if (!graph || typeof graph !== 'object' || !Array.isArray(graph.edges)) return lookup;
+  for (const edge of graph.edges) {
+    if (!edge || typeof edge !== 'object') continue;
+    const a = String(edge.source ?? '');
+    const b = String(edge.target ?? '');
+    const key = getEdgeKey(a, b);
+    if (!key) continue;
+    const current = lookup[key];
+    const currentScore = Number(current && current.matchedImagePairs);
+    const nextScore = Number(edge.matchedImagePairs);
+    if (!current || (Number.isFinite(nextScore) && (!Number.isFinite(currentScore) || nextScore > currentScore))) {
+      lookup[key] = edge;
+    }
+  }
+  return lookup;
+}
+
+function computeComponentsFromAdjacency() {
+  const components = [];
+  const visited = new Set();
+  const allIds = new Set(listings.map(l => String(l.id)));
+  for (const key of Object.keys(graphAdjacency)) allIds.add(String(key));
+
+  let seq = 1;
+  for (const rawId of allIds) {
+    const id = String(rawId ?? '');
+    if (!id || visited.has(id)) continue;
+    const queue = [id];
+    visited.add(id);
+    const memberIds = [];
+
+    while (queue.length) {
+      const current = queue.shift();
+      memberIds.push(current);
+      const neighbors = graphAdjacency[current] || new Set();
+      for (const n of neighbors) {
+        const nn = String(n ?? '');
+        if (!nn || visited.has(nn)) continue;
+        visited.add(nn);
+        queue.push(nn);
+      }
+    }
+
+    components.push({
+      componentId: String(seq++),
+      listingIds: memberIds,
+      size: memberIds.length,
+      edgeCount: 0
+    });
+  }
+
+  components.sort((a, b) => b.size - a.size);
+  return components;
+}
+
+function normalizeGraphComponents(graph) {
+  const normalized = [];
+  if (graph && typeof graph === 'object' && Array.isArray(graph.components)) {
+    for (let i = 0; i < graph.components.length; i += 1) {
+      const raw = graph.components[i];
+      if (!raw || typeof raw !== 'object') continue;
+      const listingIds = Array.isArray(raw.listingIds)
+        ? [...new Set(raw.listingIds.map(id => String(id ?? '')).filter(Boolean))]
+        : [];
+      if (!listingIds.length) continue;
+      const componentId = String(raw.componentId ?? (i + 1));
+      const edgeCount = Number(raw.edgeCount);
+      normalized.push({
+        componentId,
+        listingIds,
+        size: listingIds.length,
+        edgeCount: Number.isFinite(edgeCount) ? edgeCount : 0
+      });
+    }
+  }
+
+  if (!normalized.length && graph && typeof graph === 'object' && (Object.keys(graphAdjacency).length || Array.isArray(graph.edges))) {
+    return computeComponentsFromAdjacency();
+  }
+
+  normalized.sort((a, b) => b.size - a.size || a.componentId.localeCompare(b.componentId));
+  return normalized;
+}
+
+function rebuildComponentIndex() {
+  componentByListing = Object.create(null);
+  componentColorById = Object.create(null);
+  for (const component of graphComponents) {
+    const compId = String(component.componentId ?? '');
+    if (!compId) continue;
+    const color = getClusterColorByComponentId(compId);
+    componentColorById[compId] = color;
+    for (const id of component.listingIds) {
+      componentByListing[String(id)] = component;
+    }
+  }
+}
+
+function applyGraphData(graph) {
+  listingGraph = graph;
+  graphAdjacency = buildGraphAdjacency(graph);
+  edgeLookup = buildEdgeLookup(graph);
+  graphComponents = normalizeGraphComponents(graph);
+  rebuildComponentIndex();
+
+  if (focusedClusterKey) {
+    const exists = graphComponents.some(c => `cluster:${c.componentId}` === focusedClusterKey) || focusedClusterKey === 'unclustered';
+    if (!exists) focusedClusterKey = '';
+  }
+}
+
+// Load persisted state
+function loadState() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object') {
+        state = Object.create(null);
+        for (const [id, value] of Object.entries(parsed)) {
+          state[String(id)] = normalizeListingState(value);
+        }
+      }
+    }
+  } catch (e) {}
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function getListingState(id) {
+  const key = String(id);
+  if (!Object.prototype.hasOwnProperty.call(state, key)) state[key] = normalizeListingState(null);
+  else state[key] = normalizeListingState(state[key]);
+  return state[key];
+}
+
+// Graph helpers
+function getSharedImageListings(listingId) {
+  const key = String(listingId);
+  return new Set(graphAdjacency[key] || []);
+}
+
+function getSharedImageCount(listingId) {
+  return getSharedImageListings(listingId).size;
+}
+
+function isSharedListing(listingId) {
+  return getSharedImageCount(listingId) > 0;
+}
+
+function getComponentForListing(listingId) {
+  return componentByListing[String(listingId)] || null;
+}
+
+function isClusteredListing(listingId) {
+  const component = getComponentForListing(listingId);
+  return Boolean(component && component.size > 1);
+}
+
+function getListingClusterColor(listingId) {
+  const component = getComponentForListing(listingId);
+  if (!component || component.size <= 1) return 'hsl(208 23% 38%)';
+  return getClusterColorByComponentId(component.componentId);
+}
+
+function getComponentResolutionSummary(component) {
+  if (!component) return { resolvedCount: 0, addresses: [] };
+  let resolvedCount = 0;
+  const addressSet = new Set();
+  for (const id of component.listingIds) {
+    const ls = getListingState(id);
+    if (ls.resolved) {
+      resolvedCount += 1;
+      if (ls.address.trim()) addressSet.add(ls.address.trim());
+    }
+  }
+  return {
+    resolvedCount,
+    addresses: [...addressSet]
+  };
+}
+
+function getCurrentComponent() {
+  if (!selectedId) return null;
+  return getComponentForListing(selectedId);
+}
+
+function getCurrentComponentIdSet() {
+  const component = getCurrentComponent();
+  if (!component) return null;
+  return new Set(component.listingIds.map(id => String(id)));
+}
+
+function edgeStrength(edge) {
+  const pairCount = Number(edge && edge.matchedImagePairs);
+  const avgPhash = Number(edge && edge.avgPhashDistance);
+  if (pairCount >= 5 && Number.isFinite(avgPhash) && avgPhash <= 2) return 'Strong';
+  if (pairCount >= 2 && Number.isFinite(avgPhash) && avgPhash <= 5) return 'Medium';
+  return 'Weak';
+}
+
+function getEdgeEvidence(listingId) {
+  const fromId = String(listingId);
+  const neighbors = [...getSharedImageListings(fromId)];
+
+  const evidence = neighbors.map(neighborId => {
+    const toId = String(neighborId);
+    const edge = edgeLookup[getEdgeKey(fromId, toId)] || null;
+    const score = Number(edge && edge.matchedImagePairs);
+    const avgDist = Number(edge && edge.avgPhashDistance);
+    const samples = edge && Array.isArray(edge.sampleImagePairs)
+      ? edge.sampleImagePairs
+      : [];
+
+    return {
+      neighborId: toId,
+      edge,
+      matchedImagePairs: Number.isFinite(score) ? score : 0,
+      avgPhashDistance: Number.isFinite(avgDist) ? avgDist : null,
+      minPhashDistance: Number.isFinite(Number(edge && edge.minPhashDistance)) ? Number(edge.minPhashDistance) : null,
+      avgDhashDistance: Number.isFinite(Number(edge && edge.avgDhashDistance)) ? Number(edge.avgDhashDistance) : null,
+      minDhashDistance: Number.isFinite(Number(edge && edge.minDhashDistance)) ? Number(edge.minDhashDistance) : null,
+      sampleImagePairs: samples,
+      strength: edgeStrength(edge)
+    };
+  });
+
+  evidence.sort((a, b) => b.matchedImagePairs - a.matchedImagePairs || a.neighborId.localeCompare(b.neighborId));
+  return evidence;
+}
+
+function getStatusFilterValue() {
+  return document.getElementById('filter-status').value;
+}
+
+function getBedsFilterValue() {
+  return document.getElementById('filter-beds').value;
+}
+
+function getSearchFilterValue() {
+  return document.getElementById('filter-search').value.toLowerCase();
+}
+
+function listingMatchesFilters(listing, statusFilter, bedsFilter, searchFilter) {
+  const ls = getListingState(listing.id);
+  const id = String(listing.id ?? '');
+  const currentComponentIds = getCurrentComponentIdSet();
+
+  if (statusFilter === 'pending' && ls.resolved) return false;
+  if (statusFilter === 'resolved' && !ls.resolved) return false;
+  if (statusFilter === 'shared-images' && !isSharedListing(listing.id)) return false;
+  if (statusFilter === 'current-component') {
+    if (!currentComponentIds || !currentComponentIds.has(id)) return false;
+  }
+  if (statusFilter === 'unresolved-current-component') {
+    if (!currentComponentIds || !currentComponentIds.has(id) || ls.resolved) return false;
+  }
+  if (statusFilter === 'resolved-current-component') {
+    if (!currentComponentIds || !currentComponentIds.has(id) || !ls.resolved) return false;
+  }
+  if (bedsFilter !== 'all' && Number(listing.beds) < parseInt(bedsFilter, 10)) return false;
+
+  if (searchFilter) {
+    const haystack = [
+      listing.title,
+      listing.neighborhood,
+      ls.address,
+      ls.notes,
+      listing.id,
+      listing.description || ''
+    ].join(' ').toLowerCase();
+    if (!haystack.includes(searchFilter)) return false;
+  }
+
+  return true;
+}
+
+function renderListingCard(listing) {
+  const id = String(listing.id ?? '');
+  const encodedId = encodeInlineArg(id);
+  const ls = getListingState(id);
+  const sharedCount = getSharedImageCount(id);
+  const clusterColor = getListingClusterColor(id);
+  const component = getComponentForListing(id);
+  const isClustered = Boolean(component && component.size > 1);
+
+  const watchFlags = Array.isArray(listing.watchFlags) ? listing.watchFlags : [];
+  const priceDisplay = formatPrice(listing.price);
+  const bedsDisplay = formatMetric(listing.beds);
+  const bathsDisplay = formatMetric(listing.baths);
+  const sqftDisplay = formatSqft(listing.sqft, true);
+
+  const classes = ['listing-card'];
+  if (String(selectedId ?? '') === id) classes.push('active');
+
+  return `<div class="${classes.join(' ')}" style="--cluster-color:${escapeHtml(clusterColor)}" onclick="selectListing(decodeInlineArg('${encodedId}'))">
+    <div class="card-head">
+      <span class="status-pill ${ls.resolved ? 'resolved' : 'pending'}">${ls.resolved ? 'Resolved' : 'Pending'}</span>
+      <span class="cluster-pill"><span class="cluster-color-dot" style="background:${escapeHtml(clusterColor)}"></span>${isClustered ? `C${escapeHtml(String(component.componentId))}` : 'Unclustered'}</span>
+    </div>
+
+    <div class="card-price-row">
+      <div class="price">$${priceDisplay}</div>
+      <div class="card-layout">${bedsDisplay} BR · ${bathsDisplay} BA</div>
+    </div>
+
+    <div class="title">${escapeHtml(listing.title || 'Unknown')}</div>
+    <div class="card-meta">${escapeHtml(listing.neighborhood || 'N/A')} · #${escapeHtml(id)}${sqftDisplay ? ` · ${escapeHtml(sqftDisplay)}` : ''}</div>
+
+    <div class="card-address ${ls.resolved ? 'resolved' : 'pending'}">${ls.resolved ? escapeHtml(ls.address) : 'Address not resolved yet'}</div>
+
+    <div class="card-tags">
+      ${sharedCount > 0 ? `<span class="chip shared">${sharedCount} linked</span>` : '<span class="chip">No links</span>'}
+      ${listing.noFee ? '<span class="chip">No Fee</span>' : ''}
+      ${watchFlags.length ? `<span class="chip warn">${watchFlags.length} watch flag${watchFlags.length === 1 ? '' : 's'}</span>` : ''}
+      ${ls.notes.trim() ? '<span class="chip note">Has notes</span>' : ''}
+    </div>
+  </div>`;
+}
+
+function buildClusterGroups(filteredListings) {
+  const groupsByKey = new Map();
+
+  for (const listing of filteredListings) {
+    const id = String(listing.id ?? '');
+    const component = getComponentForListing(id);
+    const clustered = Boolean(component && component.size > 1);
+    const key = clustered ? `cluster:${component.componentId}` : 'unclustered';
+
+    if (!groupsByKey.has(key)) {
+      groupsByKey.set(key, {
+        key,
+        component: clustered ? component : null,
+        members: [],
+        unclustered: !clustered
+      });
+    }
+    groupsByKey.get(key).members.push(listing);
+  }
+
+  const groups = [...groupsByKey.values()];
+
+  for (const group of groups) {
+    group.members.sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
+  }
+
+  groups.sort((a, b) => {
+    if (a.unclustered && !b.unclustered) return 1;
+    if (!a.unclustered && b.unclustered) return -1;
+    if (a.unclustered && b.unclustered) return b.members.length - a.members.length;
+    const as = a.component ? a.component.size : a.members.length;
+    const bs = b.component ? b.component.size : b.members.length;
+    return bs - as;
+  });
+
+  return groups;
+}
+
+function renderClusterOverview(groups) {
+  const clustered = groups.filter(g => !g.unclustered);
+  if (!clustered.length) return '';
+
+  return `<div class="cluster-overview">
+    <h3>Cluster Navigator</h3>
+    <div class="cluster-jumps">
+      ${clustered.map(group => {
+        const keyArg = encodeInlineArg(group.key);
+        const comp = group.component;
+        const summary = getComponentResolutionSummary(comp);
+        const color = getClusterColorByComponentId(comp.componentId);
+        const active = focusedClusterKey === group.key ? 'active' : '';
+        return `<button type="button" class="cluster-jump ${active}" onclick="focusCluster(decodeInlineArg('${keyArg}'))">
+          <span class="cluster-color-dot" style="background:${escapeHtml(color)}"></span>
+          C${escapeHtml(String(comp.componentId))} · ${group.members.length} · ${summary.resolvedCount} resolved
+        </button>`;
+      }).join('')}
+      ${groups.some(g => g.unclustered)
+        ? `<button type="button" class="cluster-jump ${focusedClusterKey === 'unclustered' ? 'active' : ''}" onclick="focusCluster('unclustered')">Unclustered · ${groups.find(g => g.unclustered).members.length}</button>`
+        : ''}
+    </div>
+  </div>`;
+}
+
+function renderClusterGroup(group) {
+  const cards = group.members.map(renderListingCard).join('');
+
+  if (group.unclustered) {
+    const keyArg = encodeInlineArg(group.key);
+    return `<div class="cluster-group">
+      <div class="cluster-header">
+        <button type="button" onclick="focusCluster(decodeInlineArg('${keyArg}'))">
+          <div class="cluster-header-main">
+            <span>Unclustered Listings</span>
+            <span class="cluster-unresolved-tag">${group.members.length} listing${group.members.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="cluster-header-sub">
+            <span>Listings without perceptual-image links to other listings.</span>
+          </div>
+        </button>
+      </div>
+      <div class="cluster-members">${cards}</div>
+    </div>`;
+  }
+
+  const component = group.component;
+  const summary = getComponentResolutionSummary(component);
+  const total = component.size;
+  const allResolved = summary.resolvedCount === total;
+  const addressSummary = summary.addresses.length === 1
+    ? summary.addresses[0]
+    : summary.addresses.length > 1
+      ? `${summary.addresses.length} distinct addresses in cluster`
+      : 'No resolved address yet';
+
+  const color = getClusterColorByComponentId(component.componentId);
+  const keyArg = encodeInlineArg(group.key);
+
+  return `<div class="cluster-group">
+    <div class="cluster-header">
+      <button type="button" onclick="focusCluster(decodeInlineArg('${keyArg}'))">
+        <div class="cluster-header-main">
+          <span style="display:inline-flex; gap:8px; align-items:center;"><span class="cluster-color-dot" style="background:${escapeHtml(color)}"></span>Cluster C${escapeHtml(String(component.componentId))}</span>
+          <span class="${allResolved ? 'cluster-resolved-tag' : 'cluster-unresolved-tag'}">${summary.resolvedCount}/${total} resolved</span>
+        </div>
+        <div class="cluster-header-sub">
+          <span>${group.members.length} shown · ${total} total</span>
+          <span>${escapeHtml(addressSummary)}</span>
+        </div>
+      </button>
+    </div>
+    <div class="cluster-members">${cards}</div>
+  </div>`;
+}
+
+function renderSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  updateViewModeButtons();
+
+  if (!listings.length) {
+    sidebar.innerHTML = '<div class="sidebar-empty">No listings loaded yet.</div>';
+    updateStats();
+    return;
+  }
+
+  const statusFilter = getStatusFilterValue();
+  const bedsFilter = getBedsFilterValue();
+  const searchFilter = getSearchFilterValue();
+
+  const filtered = listings.filter(listing => listingMatchesFilters(listing, statusFilter, bedsFilter, searchFilter));
+
+  if (!filtered.length) {
+    sidebar.innerHTML = '<div class="sidebar-empty">No listings match current filters.</div>';
+    updateStats();
+    return;
+  }
+
+  if (sidebarMode === 'clustered') {
+    const groups = buildClusterGroups(filtered);
+    const focusBanner = focusedClusterKey
+      ? `<div class="cluster-focus">Focused: ${escapeHtml(focusedClusterKey === 'unclustered' ? 'Unclustered' : focusedClusterKey.replace('cluster:', 'Cluster C'))}<button type="button" onclick="clearClusterFocus()">Clear focus</button></div>`
+      : '';
+
+    const visibleGroups = focusedClusterKey
+      ? groups.filter(group => group.key === focusedClusterKey)
+      : groups;
+
+    sidebar.innerHTML = `${renderClusterOverview(groups)}${focusBanner}${visibleGroups.map(renderClusterGroup).join('') || '<div class="sidebar-empty">No listings in selected cluster.</div>'}`;
+  } else {
+    filtered.sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
+    sidebar.innerHTML = `<div class="sidebar-stack">${filtered.map(renderListingCard).join('')}</div>`;
+  }
+
+  updateStats();
+}
+
+function updateStats() {
+  const totalListings = listings.length;
+  const resolved = listings.filter(l => getListingState(l.id).resolved).length;
+  const pending = totalListings - resolved;
+  const sharedCount = listings.filter(l => isSharedListing(l.id)).length;
+
+  let totalClusters = graphComponents.length;
+  let resolvedClusters = 0;
+  if (totalClusters) {
+    resolvedClusters = graphComponents.filter(component => component.listingIds.some(id => getListingState(id).resolved)).length;
+  }
+
+  document.getElementById('stat-resolved').textContent = `${resolved} resolved`;
+  document.getElementById('stat-pending').textContent = `${pending} pending`;
+  document.getElementById('stat-shared').textContent = `${sharedCount} connected listings`;
+  document.getElementById('stat-clusters').textContent = totalClusters ? `${resolvedClusters}/${totalClusters} clusters resolved` : 'No graph clusters';
+  document.getElementById('stat-total').textContent = `${totalListings} listings`;
+
+  const width = totalListings ? (resolved / totalListings) * 100 : 0;
+  document.getElementById('progress-fill').style.width = `${width}%`;
+}
+
+function renderComponentPanel(component, selectedListingId) {
+  if (!component || component.size <= 1) return '';
+
+  const selectedComponentKey = `cluster:${component.componentId}`;
+  const selectedComponentKeyArg = encodeInlineArg(selectedComponentKey);
+  const selectedIdStr = String(selectedListingId ?? '');
+  const members = component.listingIds
+    .map(id => String(id))
+    .filter(id => Boolean(getListingById(id)))
+    .map(id => {
+      const listing = getListingById(id);
+      const ls = getListingState(id);
+      return { id, listing, ls };
+    });
+
+  members.sort((a, b) => {
+    if (a.ls.resolved !== b.ls.resolved) return a.ls.resolved ? 1 : -1;
+    return Number(b.listing.price || 0) - Number(a.listing.price || 0);
+  });
+
+  const resolvedCount = members.filter(m => m.ls.resolved).length;
+  const unresolvedCount = members.length - resolvedCount;
+  const memberRows = members.map(member => {
+    const idArg = encodeInlineArg(member.id);
+    const active = member.id === selectedIdStr ? 'active' : '';
+    const stateClass = member.ls.resolved ? 'resolved' : '';
+    const statusLabel = member.ls.resolved ? 'Resolved' : 'Unresolved';
+    return `<button type="button" class="member-chip ${stateClass} ${active}" onclick="selectListing(decodeInlineArg('${idArg}'))">#${escapeHtml(member.id)} ${escapeHtml(member.listing.title || '')} · ${statusLabel}</button>`;
+  }).join('');
+
+  return `<section class="section">
+    <div class="section-header">
+      <h3>Component Panel</h3>
+      <span class="chip shared">${members.length} listings</span>
+    </div>
+    <div class="component-meta">
+      <div class="component-stats">
+        <span class="chip">Component C${escapeHtml(String(component.componentId))}</span>
+        <span class="chip">Size ${members.length}</span>
+        <span class="chip">Resolved ${resolvedCount}</span>
+        <span class="chip">Unresolved ${unresolvedCount}</span>
+      </div>
+      <div class="component-actions">
+        <button type="button" class="component-action-btn" onclick="focusCluster(decodeInlineArg('${selectedComponentKeyArg}'))">Focus Sidebar on Component</button>
+      </div>
+    </div>
+    <div class="connected-members">${memberRows}</div>
+  </section>`;
+}
+
+function renderConnectedMembers(sharedWith, evidence) {
+  if (!sharedWith.size) return '';
+
+  const evidenceByNeighbor = Object.create(null);
+  for (const item of evidence) {
+    evidenceByNeighbor[String(item.neighborId)] = item;
+  }
+
+  const rows = [...sharedWith].map(id => String(id ?? '')).map(neighborId => {
+    const listing = getListingById(neighborId);
+    const ls = getListingState(neighborId);
+    const neighborArg = encodeInlineArg(neighborId);
+    const item = evidenceByNeighbor[neighborId] || {};
+    const pairCount = Number.isFinite(item.matchedImagePairs) ? item.matchedImagePairs : 0;
+    const minPhash = item.minPhashDistance == null ? 'n/a' : item.minPhashDistance.toFixed(2);
+    const avgPhash = item.avgPhashDistance == null ? 'n/a' : item.avgPhashDistance.toFixed(2);
+    const minDhash = item.minDhashDistance == null ? 'n/a' : item.minDhashDistance.toFixed(2);
+    const avgDhash = item.avgDhashDistance == null ? 'n/a' : item.avgDhashDistance.toFixed(2);
+    const strength = String(item.strength || 'Weak');
+    const strengthClass = strength.toLowerCase();
+    const sampleRows = Array.isArray(item.sampleImagePairs)
+      ? item.sampleImagePairs.slice(0, 3).map((pair, idx) => {
+        const urlA = safeUrl(pair && pair.urlA);
+        const urlB = safeUrl(pair && pair.urlB);
+        if (!urlA && !urlB) return '';
+        return `<div class="sample-link-row">
+          ${urlA ? `<a href="${escapeHtml(urlA)}" target="_blank" rel="noopener noreferrer">A${idx + 1}: ${escapeHtml(urlA)}</a>` : ''}
+          ${urlB ? `<a href="${escapeHtml(urlB)}" target="_blank" rel="noopener noreferrer">B${idx + 1}: ${escapeHtml(urlB)}</a>` : ''}
+        </div>`;
+      }).filter(Boolean).join('')
+      : '';
+
+    return `<article class="edge-card">
+      <div class="edge-head">
+        <button type="button" class="edge-link" onclick="selectListing(decodeInlineArg('${neighborArg}'))">#${escapeHtml(neighborId)} ${escapeHtml(listing ? (listing.title || '') : '')}</button>
+        <div class="edge-meta">
+          <span class="edge-strength ${escapeHtml(strengthClass)}">${escapeHtml(strength)}</span>
+          <span>${pairCount} match pairs</span>
+          <span>pHash min/avg ${escapeHtml(minPhash)} / ${escapeHtml(avgPhash)}</span>
+          <span>dHash min/avg ${escapeHtml(minDhash)} / ${escapeHtml(avgDhash)}</span>
+          <span>${ls.resolved ? 'Resolved' : 'Pending'}</span>
+        </div>
+      </div>
+      <details>
+        <summary>Sample image pairs</summary>
+        <div class="sample-link-grid">
+          ${sampleRows || '<div class="edge-empty">No sample image pairs available for this edge.</div>'}
+        </div>
+      </details>
+    </article>`;
+  });
+
+  return `<div class="connected-evidence">${rows.join('')}</div>`;
+}
+
+function renderEdgeEvidenceSection(selectedListingId, evidence) {
+  if (!evidence.length) return '';
+
+  const MAX_EDGES = 8;
+  const displayed = evidence.slice(0, MAX_EDGES);
+
+  const cards = displayed.map(item => {
+    const neighborId = String(item.neighborId);
+    const neighborListing = getListingById(neighborId);
+    const neighborArg = encodeInlineArg(neighborId);
+    const pairCount = Number.isFinite(item.matchedImagePairs) ? item.matchedImagePairs : 0;
+    const minPhash = item.minPhashDistance == null ? 'n/a' : item.minPhashDistance.toFixed(2);
+    const avgDistance = item.avgPhashDistance == null ? 'n/a' : item.avgPhashDistance.toFixed(2);
+    const minDhash = item.minDhashDistance == null ? 'n/a' : item.minDhashDistance.toFixed(2);
+    const avgDhash = item.avgDhashDistance == null ? 'n/a' : item.avgDhashDistance.toFixed(2);
+    const strength = String(item.strength || 'Weak');
+    const strengthClass = strength.toLowerCase();
+
+    const pairRows = item.sampleImagePairs
+      .map(pair => {
+        const urlA = safeUrl(pair && pair.urlA);
+        const urlB = safeUrl(pair && pair.urlB);
+        if (!urlA && !urlB) return '';
+
+        const imgA = urlA
+          ? `<a class="pair-image" href="${escapeHtml(urlA)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(urlA)}" loading="lazy" alt="Matched sample A"></a>`
+          : '<div class="pair-image"></div>';
+        const imgB = urlB
+          ? `<a class="pair-image" href="${escapeHtml(urlB)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(urlB)}" loading="lazy" alt="Matched sample B"></a>`
+          : '<div class="pair-image"></div>';
+
+        return `<div>
+          <div class="pair-row">${imgA}${imgB}</div>
+          <div class="pair-row-labels"><span>Listing #${escapeHtml(String(selectedListingId))}</span><span>Listing #${escapeHtml(neighborId)}</span></div>
+        </div>`;
+      })
+      .filter(Boolean)
+      .join('');
+
+    return `<article class="edge-card">
+      <div class="edge-head">
+        <button type="button" class="edge-link" onclick="selectListing(decodeInlineArg('${neighborArg}'))">#${escapeHtml(neighborId)} ${escapeHtml(neighborListing ? (neighborListing.title || '') : '')}</button>
+        <div class="edge-meta">
+          <span class="edge-strength ${escapeHtml(strengthClass)}">${escapeHtml(strength)}</span>
+          <span>${pairCount} match pairs</span>
+          <span>pHash min/avg ${escapeHtml(minPhash)} / ${escapeHtml(avgDistance)}</span>
+          <span>dHash min/avg ${escapeHtml(minDhash)} / ${escapeHtml(avgDhash)}</span>
+        </div>
+      </div>
+      <div class="pair-grid">${pairRows || '<div class="edge-empty">No sample image pairs available for this edge.</div>'}</div>
+    </article>`;
+  }).join('');
+
+  const truncated = evidence.length > MAX_EDGES
+    ? `<p class="section-sub">Showing strongest ${MAX_EDGES} edges by matched image pairs (${evidence.length} total).</p>`
+    : '';
+
+  return `<section class="edge-section">
+    <div class="section-header">
+      <h3>Image-Match Evidence</h3>
+      <span class="chip shared">${evidence.length} linked listings</span>
+    </div>
+    <p class="section-sub">Review side-by-side sample image pairs before propagating addresses across a cluster.</p>
+    ${truncated}
+    <div class="edge-grid">${cards}</div>
+  </section>`;
+}
+
+function renderListingImages(imageUrls) {
+  const cards = imageUrls.map((img, i) => {
+    const safeImg = safeUrl(img);
+    if (!safeImg) return '';
+
+    const imgArg = encodeInlineArg(safeImg);
+    const lensHref = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(safeImg)}`;
+
+    return `<article class="image-card">
+      <div class="image-frame">
+        <img src="${escapeHtml(safeImg)}" alt="Photo ${i + 1}" loading="lazy" onclick="window.open(decodeInlineArg('${imgArg}'),'_blank')">
+        <div class="image-overlay">
+          <a class="image-action primary" href="${lensHref}" target="_blank" rel="noopener noreferrer">Search Lens</a>
+          <a class="image-action" href="${escapeHtml(safeImg)}" target="_blank" rel="noopener noreferrer">Open Full</a>
+          <button class="image-action" type="button" onclick="copyText(decodeInlineArg('${imgArg}'))">Copy URL</button>
+        </div>
+      </div>
+    </article>`;
+  }).join('');
+
+  return cards || '<div class="main-empty">No valid image URLs on this listing.</div>';
+}
+
+function renderDetailsPanels(listing, features) {
+  const sections = [];
+
+  if (features.length) {
+    sections.push(`<details class="collapsible" open>
+      <summary>Features (${features.length})</summary>
+      <div class="collapsible-content"><div class="features-grid">${features.map(f => `<span class="feature">${escapeHtml(f)}</span>`).join('')}</div></div>
+    </details>`);
+  }
+
+  if (listing.description) {
+    sections.push(`<details class="collapsible" open>
+      <summary>Description</summary>
+      <div class="collapsible-content"><div class="description">${escapeHtml(listing.description)}</div></div>
+    </details>`);
+  }
+
+  if (listing.parking) {
+    sections.push(`<details class="collapsible">
+      <summary>Parking</summary>
+      <div class="collapsible-content">${escapeHtml(listing.parking)}</div>
+    </details>`);
+  }
+
+  if (listing.petPolicy) {
+    sections.push(`<details class="collapsible">
+      <summary>Pet Policy</summary>
+      <div class="collapsible-content">${escapeHtml(listing.petPolicy)}</div>
+    </details>`);
+  }
+
+  return sections.join('');
+}
+
+function selectListing(id) {
+  selectedId = String(id);
+  const listing = getListingById(selectedId);
+  if (!listing) return;
+
+  hideEmptyState();
+
+  const ls = getListingState(selectedId);
+  const component = getComponentForListing(selectedId);
+  const componentSummary = getComponentResolutionSummary(component);
+  const sharedWith = getSharedImageListings(selectedId);
+  const sharedWithCount = sharedWith.size;
+  const evidence = getEdgeEvidence(selectedId);
+
+  const encodedId = encodeInlineArg(selectedId);
+  const watchFlags = Array.isArray(listing.watchFlags) ? listing.watchFlags : [];
+  const features = Array.isArray(listing.features) ? listing.features : [];
+  const imageUrls = Array.isArray(listing.imageUrls) ? listing.imageUrls : [];
+
+  const listingUrl = safeUrl(listing.url) || `https://www.luxuryapartmentslic.com/index.cfm?page=properties&id=${encodeURIComponent(selectedId)}`;
+
+  const priceDisplay = formatPrice(listing.price);
+  const bedsDisplay = formatMetric(listing.beds);
+  const bathsDisplay = formatMetric(listing.baths);
+  const sqftDisplay = formatSqft(listing.sqft, false);
+
+  const clusterColor = getListingClusterColor(selectedId);
+  const clustered = Boolean(component && component.size > 1);
+  const geocodeEnabled = isGeocodeConfigured();
+  const geocodeConfigHint = geocodeEnabled
+    ? ''
+    : '<p class="address-help">Geocode is disabled. Configure <code>.env</code> and run <code>node scripts/generate-tool-config.js</code>. For Cloudflare, prefer <code>LIC_GEOCODE_ENDPOINT</code>.</p>';
+  const addressSummary = componentSummary.addresses.length === 1
+    ? componentSummary.addresses[0]
+    : componentSummary.addresses.length > 1
+      ? `${componentSummary.addresses.length} addresses in this cluster`
+      : 'No resolved addresses in this cluster yet';
+
+  const main = document.getElementById('main');
+  const conflictAddresses = getComponentConflictAddresses(component);
+  const hasComponentConflict = conflictAddresses.length > 1;
+  const lastBulkIsCurrent = Boolean(lastBulkApply && component && String(lastBulkApply.componentId) === String(component.componentId));
+  const metadataBits = [];
+  if (ls.source) metadataBits.push(`source: ${ls.source}`);
+  if (ls.confidence != null) metadataBits.push(`confidence: ${ls.confidence}`);
+  if (ls.updatedAt) metadataBits.push(`updated: ${ls.updatedAt}`);
+  const metadataLine = metadataBits.length ? `<p class="section-sub">${escapeHtml(metadataBits.join(' · '))}</p>` : '';
+  const saveModeLine = isApiAssertionsEnabled()
+    ? '<p class="section-sub">Save mode: API-backed (`POST /api/assertions`) with local cache merge.</p>'
+    : '<p class="section-sub">Save mode: local-only (`localStorage`).</p>';
+
+  main.innerHTML = `
+    <div class="detail-shell">
+      <section class="hero">
+        <div>
+          <div class="hero-title">
+            <h2>${escapeHtml(listing.title || 'Unknown')}</h2>
+            <span class="hero-id">#${escapeHtml(selectedId)}</span>
+          </div>
+
+          <div class="hero-price">$${priceDisplay}</div>
+
+          <div class="hero-metrics">
+            <span class="metric-chip">${bedsDisplay} BR</span>
+            <span class="metric-chip">${bathsDisplay} BA</span>
+            <span class="metric-chip">${sqftDisplay === 'N/A' ? 'Sq Ft N/A' : `${sqftDisplay} ft²`}</span>
+            <span class="metric-chip">${escapeHtml(listing.neighborhood || 'Area N/A')}</span>
+            <span class="metric-chip">${escapeHtml(listing.type || 'Type N/A')}${listing.noFee ? ' / No Fee' : ''}</span>
+            <span class="metric-chip">${sharedWithCount} linked listings</span>
+          </div>
+
+          ${watchFlags.length ? `<div class="watch-flags">${watchFlags.map(f => `<span class="chip warn">${escapeHtml(f)}</span>`).join('')}</div>` : ''}
+        </div>
+
+        <div class="hero-side">
+          <a class="hero-link" href="${escapeHtml(listingUrl)}" target="_blank" rel="noopener noreferrer">View Listing Source</a>
+          <div class="hero-cluster">
+            <div style="display:flex;align-items:center;gap:8px; justify-content:flex-end;"><span class="cluster-color-dot" style="background:${escapeHtml(clusterColor)}"></span><strong>${clustered ? `Cluster C${escapeHtml(String(component.componentId))}` : 'Unclustered listing'}</strong></div>
+            <div>${clustered ? `${componentSummary.resolvedCount}/${component.size} resolved` : 'No cluster neighbors in graph'}</div>
+            <div>${escapeHtml(addressSummary)}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="address-section">
+        <div class="section-header">
+          <h3>Address Resolution</h3>
+          <span class="address-status ${ls.resolved ? 'resolved' : 'pending'}">${ls.resolved ? 'Resolved' : 'Pending'}</span>
+        </div>
+
+        <p class="address-help">Normalize with geocode, then save. Bulk apply is a separate action and defaults to unresolved listings only.</p>
+        ${saveModeLine}
+        ${metadataLine}
+
+        ${ls.resolved
+          ? `<div class="address-resolved-box">
+              <strong>${escapeHtml(ls.address)}</strong>
+              <button type="button" class="address-btn edit" onclick="editAddress(decodeInlineArg('${encodedId}'))">Edit Address</button>
+            </div>`
+          : `<div class="address-row">
+              <input type="text" id="address-input" placeholder="Paste resolved address here..." value="${escapeHtml(ls.address || '')}" onkeydown="if(event.key==='Enter')saveAddress(decodeInlineArg('${encodedId}'))">
+              <div class="address-buttons">
+                <button type="button" class="address-btn geocode" id="geocode-btn" onclick="geocodeAndFill()" ${geocodeEnabled ? '' : 'disabled title="Configure geocoding in .env and regenerate config.local.js"'}>Normalize</button>
+                <button type="button" class="address-btn save" onclick="saveAddress(decodeInlineArg('${encodedId}'))">Save Address</button>
+              </div>
+            </div>${geocodeConfigHint}`}
+
+        ${clustered ? `<p class="address-cluster-hint">Cluster C${escapeHtml(String(component.componentId))}: ${componentSummary.resolvedCount} resolved, ${component.size - componentSummary.resolvedCount} unresolved.</p>` : ''}
+        ${clustered && hasComponentConflict ? `<div class="component-warning">Bulk apply blocked: component has conflicting resolved addresses (${escapeHtml(conflictAddresses.join(' | '))}). Resolve conflict first.</div>` : ''}
+        ${clustered ? `<div class="component-actions" style="margin-bottom:10px;">
+          <button type="button" class="component-action-btn" onclick="applyAddressToCurrentComponent()">Apply Address To Component</button>
+          <button type="button" class="component-action-btn warn" onclick="undoLastBulkApplyForCurrentComponent()" ${lastBulkIsCurrent ? '' : 'disabled'}>Undo Last Bulk Apply</button>
+        </div>` : ''}
+
+        <textarea class="notes-input" id="notes-input" placeholder="Notes (optional)..." oninput="saveNotes(decodeInlineArg('${encodedId}'))">${escapeHtml(ls.notes || '')}</textarea>
+      </section>
+
+      <section class="image-section">
+        <div class="section-header">
+          <h3>Primary Investigation Images</h3>
+          <span class="chip shared">${imageUrls.length} image${imageUrls.length === 1 ? '' : 's'}</span>
+        </div>
+        <p class="section-sub">Use larger action targets directly on each image: Google Lens, open full-size, or copy URL.</p>
+        <div class="image-gallery">${renderListingImages(imageUrls)}</div>
+      </section>
+
+      ${clustered || sharedWithCount > 0 ? `<section class="section">
+        <div class="section-header">
+          <h3>Connected Listings</h3>
+          <span class="chip shared">${sharedWithCount} direct neighbors</span>
+        </div>
+        <p class="section-sub">Each neighbor includes edge evidence and strength from listing-graph.json.</p>
+        ${renderConnectedMembers(sharedWith, evidence)}
+      </section>` : ''}
+
+      ${renderComponentPanel(component, selectedId)}
+
+      ${renderEdgeEvidenceSection(selectedId, evidence)}
+
+      ${renderDetailsPanels(listing, features)}
+    </div>
+  `;
+
+  renderSidebar();
+}
+
+function getComponentConflictAddresses(component) {
+  if (!component) return [];
+  const canonical = new Map();
+  for (const id of component.listingIds) {
+    const ls = getListingState(id);
+    if (!ls.resolved || !ls.address.trim()) continue;
+    const raw = ls.address.trim();
+    const norm = raw.toLowerCase();
+    if (!canonical.has(norm)) canonical.set(norm, raw);
+  }
+  return [...canonical.values()];
+}
+
+function applyAddressToCurrentComponent() {
+  const key = String(selectedId || '');
+  if (!key) return;
+  const sourceState = getListingState(key);
+  const sourceAddress = sourceState.address.trim();
+  if (!sourceState.resolved || !sourceAddress) {
+    alert('Save a resolved address on the selected listing before bulk apply.');
+    return;
+  }
+
+  const component = getComponentForListing(key);
+  if (!component || component.size <= 1) {
+    alert('Selected listing does not have a multi-listing component.');
+    return;
+  }
+
+  const conflictAddresses = getComponentConflictAddresses(component);
+  if (conflictAddresses.length > 1) {
+    alert(`Bulk apply blocked: component has conflicting resolved addresses (${conflictAddresses.join(' | ')}).`);
+    return;
+  }
+
+  const memberIds = component.listingIds
+    .map(id => String(id))
+    .filter(id => Boolean(getListingById(id)));
+  const targetIds = memberIds.filter(id => {
+    const ls = getListingState(id);
+    return !ls.resolved;
+  });
+
+  if (!targetIds.length) {
+    alert(`No unresolved listings to update in Component C${component.componentId}.`);
+    return;
+  }
+
+  const message = `Apply "${sourceAddress}" to ${targetIds.length} unresolved listing(s) in Component C${component.componentId}?`;
+  if (!window.confirm(message)) return;
+
+  const timestamp = nowIso();
+  const changes = [];
+  for (const id of targetIds) {
+    const ls = getListingState(id);
+    const prev = { ...ls };
+    ls.address = sourceAddress;
+    ls.resolved = true;
+    ls.source = 'inferred_component';
+    ls.confidence = 0.8;
+    ls.updatedAt = timestamp;
+    changes.push({ id, prev });
+  }
+
+  if (!changes.length) return;
+  lastBulkApply = {
+    componentId: String(component.componentId),
+    sourceListingId: key,
+    address: sourceAddress,
+    createdAt: timestamp,
+    changes
+  };
+
+  saveState();
+  selectListing(key);
+}
+
+function undoLastBulkApplyForCurrentComponent() {
+  const key = String(selectedId || '');
+  if (!key || !lastBulkApply) return;
+  const component = getComponentForListing(key);
+  if (!component || String(component.componentId) !== String(lastBulkApply.componentId)) {
+    alert('No bulk apply history for the current component.');
+    return;
+  }
+
+  for (const change of lastBulkApply.changes) {
+    state[String(change.id)] = normalizeListingState(change.prev);
+  }
+  lastBulkApply = null;
+  saveState();
+  selectListing(key);
+}
+
+function mergeAssignments(assignments) {
+  if (!assignments || typeof assignments !== 'object') return;
+  for (const [id, incomingRaw] of Object.entries(assignments)) {
+    const key = String(id);
+    const incoming = normalizeListingState(incomingRaw);
+    const existing = getListingState(key);
+    state[key] = normalizeListingState({
+      address: incoming.address,
+      resolved: incoming.resolved,
+      notes: existing.notes || '',
+      source: incoming.source || existing.source || '',
+      confidence: incoming.confidence != null ? incoming.confidence : existing.confidence,
+      updatedAt: incoming.updatedAt || existing.updatedAt || nowIso()
+    });
+  }
+}
+
+async function postAssertionToApi(listingId, address) {
+  const res = await fetch(buildApiUrl('/api/assertions'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({
+      listingId: String(listingId),
+      address: String(address),
+      source: 'manual_ui'
+    })
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || !payload || payload.ok !== true) {
+    const message = payload && typeof payload.error === 'string'
+      ? payload.error
+      : `API request failed (HTTP ${res.status})`;
+    throw new Error(message);
+  }
+  return payload;
+}
+
+async function saveAddress(id) {
+  const input = document.getElementById('address-input');
+  if (!input) return;
+
+  const address = input.value.trim();
+  if (!address) return;
+
+  const key = String(id);
+  const ls = getListingState(key);
+  ls.address = address;
+  ls.resolved = true;
+  ls.source = 'direct';
+  ls.confidence = 1.0;
+  ls.updatedAt = nowIso();
+
+  if (isApiAssertionsEnabled()) {
+    try {
+      const payload = await postAssertionToApi(key, address);
+      if (payload.assignments && typeof payload.assignments === 'object') {
+        mergeAssignments(payload.assignments);
+      }
+      if (payload.conflict) {
+        alert('Saved, but component has conflicting direct addresses. Inference was limited.');
+      }
+    } catch (e) {
+      alert(`API save failed, kept local save only: ${e.message}`);
+    }
+  }
+
+  saveState();
+  selectListing(key);
+}
+
+function editAddress(id) {
+  const ls = getListingState(id);
+  ls.resolved = false;
+  ls.source = '';
+  ls.confidence = null;
+  ls.updatedAt = nowIso();
+  saveState();
+  selectListing(id);
+}
+
+function saveNotes(id) {
+  const textarea = document.getElementById('notes-input');
+  if (!textarea) return;
+  const ls = getListingState(id);
+  ls.notes = textarea.value;
+  saveState();
+  renderSidebar();
+}
+
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+}
+
+function updateViewModeButtons() {
+  const flatBtn = document.getElementById('view-flat');
+  const clusteredBtn = document.getElementById('view-clustered');
+  if (!flatBtn || !clusteredBtn) return;
+
+  flatBtn.classList.toggle('active', sidebarMode === 'flat');
+  clusteredBtn.classList.toggle('active', sidebarMode === 'clustered');
+}
+
+function setSidebarMode(mode) {
+  sidebarMode = (mode === 'clustered') ? 'clustered' : 'flat';
+  if (sidebarMode !== 'clustered') focusedClusterKey = '';
+  renderSidebar();
+}
+
+function focusCluster(clusterKey) {
+  const key = String(clusterKey || '');
+  if (!key) return;
+  focusedClusterKey = (focusedClusterKey === key) ? '' : key;
+  if (sidebarMode !== 'clustered') sidebarMode = 'clustered';
+  renderSidebar();
+}
+
+function clearClusterFocus() {
+  focusedClusterKey = '';
+  renderSidebar();
+}
+
+// Export/Import
+function exportState() {
+  const blob = new Blob([JSON.stringify({ state, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'lic-investigator-state.json';
+  a.click();
+}
+
+function importState(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data && typeof data === 'object' && data.state && typeof data.state === 'object') {
+        for (const [id, val] of Object.entries(data.state)) {
+          const key = String(id);
+          if (!state[key] || !state[key].resolved) {
+            state[key] = normalizeListingState(val);
+          }
+        }
+        saveState();
+        renderSidebar();
+        if (selectedId) selectListing(selectedId);
+        alert('State imported and merged successfully');
+      }
+    } catch (e) {
+      alert('Invalid file');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// Load data files
+function loadListingsFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      listings = JSON.parse(e.target.result);
+      rebuildListingIndex();
+      if (listingGraph) {
+        applyGraphData(listingGraph);
+      }
+      renderSidebar();
+      if (listings.length > 0) hideEmptyState();
+      if (selectedId && getListingById(selectedId)) selectListing(selectedId);
+    } catch (e) {
+      alert('Invalid listings.json');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function loadListingGraphFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const graph = JSON.parse(e.target.result);
+      applyGraphData(graph);
+      renderSidebar();
+      if (selectedId) selectListing(selectedId);
+    } catch (e) {
+      alert('Invalid listing-graph.json');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// Auto-load from relative paths (when served locally)
+async function loadFromDisk() {
+  try {
+    const [listingsRes, graphRes] = await Promise.all([
+      fetch('data/listings.json'),
+      fetch('data/hash-graph/listing-graph.json')
+    ]);
+
+    if (listingsRes.ok) {
+      listings = await listingsRes.json();
+      rebuildListingIndex();
+      hideEmptyState();
+    }
+
+    if (graphRes.ok) {
+      const graph = await graphRes.json();
+      applyGraphData(graph);
+    } else {
+      applyGraphData(null);
+    }
+
+    renderSidebar();
+    if (selectedId) selectListing(selectedId);
+    return;
+  } catch (e) {}
+
+  try {
+    const bootstrapRes = await fetch(buildApiUrl('/api/bootstrap'), {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    if (bootstrapRes.ok) {
+      const payload = await bootstrapRes.json();
+      if (payload && payload.ok && Array.isArray(payload.listings) && payload.graph && typeof payload.graph === 'object') {
+        listings = payload.listings;
+        rebuildListingIndex();
+        applyGraphData(payload.graph);
+        hideEmptyState();
+        renderSidebar();
+        if (selectedId) selectListing(selectedId);
+        return;
+      }
+    }
+  } catch (e) {}
+
+  console.log('Auto-load failed (local data and API bootstrap), use file picker instead');
+  renderSidebar();
+}
+
+// Filters
+const statusFilterEl = document.getElementById('filter-status');
+const bedsFilterEl = document.getElementById('filter-beds');
+const searchFilterEl = document.getElementById('filter-search');
+
+statusFilterEl.addEventListener('change', renderSidebar);
+bedsFilterEl.addEventListener('change', renderSidebar);
+searchFilterEl.addEventListener('input', renderSidebar);
+
+// Init
+loadState();
+updateViewModeButtons();
+renderSidebar();
+loadFromDisk();
+</script>
+</body>
+</html>

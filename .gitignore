@@ -1,0 +1,20 @@
+.env
+.env.*
+!.env.example
+tool/config.local.js
+node_modules
+.DS_Store
+npm-debug.log*
+.claude/
+
+# Generated data artifacts
+data/images-cache/
+data/page-*.html
+data/scrape-progress.log
+data/listings.json
+data/image-map.json
+data/hash-graph/
+.firecrawl/
+apps/worker/public/
+apps/worker/seed/
+scripts/__pycache__/

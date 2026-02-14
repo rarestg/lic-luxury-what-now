@@ -1,0 +1,5 @@
+pre-commit:
+  parallel: true
+  commands:
+    code-quality:
+      run: npm run check:fix

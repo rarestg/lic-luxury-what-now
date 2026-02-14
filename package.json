@@ -1,0 +1,19 @@
+{
+  "name": "lic-listings",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "format": "biome format --write .",
+    "lint": "biome lint .",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "check": "npm run lint && npm run typecheck",
+    "check:fix": "biome check --write . && npm run typecheck",
+    "prepare": "node -e \"const fs=require('fs'); if(fs.existsSync('.git')){require('child_process').execSync('lefthook install',{stdio:'inherit'});} else {console.log('Skipping lefthook install (no .git directory).');}\""
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "lefthook": "^1.8.4",
+    "typescript": "^5.7.3"
+  }
+}
