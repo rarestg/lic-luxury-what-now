@@ -82,9 +82,20 @@ function audienceIncludes(audClaim, expectedAud) {
 }
 
 const accessJwksCache = new Map(); // teamDomain -> { expiresAt, keys }
+const accessJwksForcedRefreshByTeam = new Map(); // teamDomain -> last forced refresh ms
 const ACCESS_JWKS_TTL_MS = 5 * 60 * 1000;
+const ACCESS_JWKS_FORCED_REFRESH_COOLDOWN_MS = 30000;
 const JWT_CLOCK_SKEW_SECONDS = 60;
 const textEncoder = new TextEncoder();
+
+function canForceRefreshJwks(teamDomain) {
+  const key = String(teamDomain || "");
+  const now = Date.now();
+  const last = Number(accessJwksForcedRefreshByTeam.get(key) || 0);
+  if (now - last < ACCESS_JWKS_FORCED_REFRESH_COOLDOWN_MS) return false;
+  accessJwksForcedRefreshByTeam.set(key, now);
+  return true;
+}
 
 async function getAccessJwks(teamDomain, options = {}) {
   const forceRefresh = Boolean(options?.forceRefresh);
@@ -153,7 +164,7 @@ async function verifyAccessJwtAndExtractIdentity(token, teamDomain, expectedAud)
   let keys = await getAccessJwks(teamDomain);
   const kid = String(header.kid || "").trim();
   let candidateKeys = kid ? keys.filter((key) => String(key.kid || "") === kid) : keys;
-  if (!candidateKeys.length && kid) {
+  if (!candidateKeys.length && kid && canForceRefreshJwks(teamDomain)) {
     keys = await getAccessJwks(teamDomain, { forceRefresh: true });
     candidateKeys = keys.filter((key) => String(key.kid || "") === kid);
   }
