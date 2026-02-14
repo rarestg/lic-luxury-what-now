@@ -48,7 +48,7 @@ cd apps/worker
 npm run dev
 ```
 
-If you intentionally want to skip the bundle refresh, use:
+If you intentionally want to skip the bundle refresh (from `apps/worker`), use:
 
 ```bash
 npm run dev:raw

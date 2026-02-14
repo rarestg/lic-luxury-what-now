@@ -47,6 +47,18 @@ function normalizeTeamDomain(value) {
   return raw.replace(/\/+$/, "");
 }
 
+function isLocalDevRequest(request) {
+  try {
+    const url = new URL(request.url);
+    const hostname = String(url.hostname || "")
+      .trim()
+      .toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
 function isTruthy(value) {
   return ["1", "true", "yes", "on"].includes(
     String(value || "")
@@ -74,11 +86,18 @@ const ACCESS_JWKS_TTL_MS = 5 * 60 * 1000;
 const JWT_CLOCK_SKEW_SECONDS = 60;
 const textEncoder = new TextEncoder();
 
-async function getAccessJwks(teamDomain) {
+async function getAccessJwks(teamDomain, options = {}) {
+  const forceRefresh = Boolean(options?.forceRefresh);
   const cacheKey = String(teamDomain);
   const now = Date.now();
   const cached = accessJwksCache.get(cacheKey);
-  if (cached && cached.expiresAt > now && Array.isArray(cached.keys) && cached.keys.length) {
+  if (
+    !forceRefresh &&
+    cached &&
+    cached.expiresAt > now &&
+    Array.isArray(cached.keys) &&
+    cached.keys.length
+  ) {
     return cached.keys;
   }
 
@@ -131,9 +150,13 @@ async function verifyAccessJwtAndExtractIdentity(token, teamDomain, expectedAud)
 
   const signingInput = textEncoder.encode(`${encodedHeader}.${encodedPayload}`);
   const signature = decodeBase64UrlToBytes(encodedSignature);
-  const keys = await getAccessJwks(teamDomain);
+  let keys = await getAccessJwks(teamDomain);
   const kid = String(header.kid || "").trim();
-  const candidateKeys = kid ? keys.filter((key) => String(key.kid || "") === kid) : keys;
+  let candidateKeys = kid ? keys.filter((key) => String(key.kid || "") === kid) : keys;
+  if (!candidateKeys.length && kid) {
+    keys = await getAccessJwks(teamDomain, { forceRefresh: true });
+    candidateKeys = keys.filter((key) => String(key.kid || "") === kid);
+  }
   if (!candidateKeys.length) return null;
 
   let verified = false;
@@ -169,8 +192,9 @@ async function getIdentityFromAccessJwt(request, env) {
   const teamDomain = normalizeTeamDomain(env.CF_ACCESS_TEAM_DOMAIN);
   const expectedAud = String(env.CF_ACCESS_AUD || "").trim();
   const devBypassEnabled = isTruthy(env.ACCESS_DEV_BYPASS);
+  const localDevRequest = isLocalDevRequest(request);
 
-  if (devBypassEnabled && (!teamDomain || !expectedAud)) {
+  if (devBypassEnabled && (localDevRequest || !teamDomain || !expectedAud)) {
     const devIdentity = String(request.headers.get("x-dev-user") || "").trim();
     return devIdentity || getUnverifiedIdentityFromToken(token) || "dev-bypass@local";
   }
@@ -232,6 +256,8 @@ function isNonEmptyString(value) {
 }
 
 function maybeNumber(value, fallback = null) {
+  if (value == null) return fallback;
+  if (typeof value === "string" && !value.trim()) return fallback;
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
 }
